@@ -8,6 +8,8 @@ Between those steps the editor (Claude) does its part and moves the page on by c
 through flow.py. Stages, and who acts:
   upload (person) -> transcribing (this server) -> suggesting (Claude) -> brief (person) -> recommending (Claude)
   -> highlight (person) -> music (person) -> editing (Claude) -> review (person) -> editing ... -> done
+Back on the page: highlight -> brief, music -> highlight, review -> music. state.json carries `reason` for an
+editing stage: lines (first build, or the lines changed), music (only the music changed), notes.
 Files written for Claude: brief.json, marks.json, music.json, notes.json. Files Claude writes for the page:
 suggest.json {"audiences": [...]}, recommend.json {"keys": ["c1:4", ...]}.
 Start it in the background; it exits a few seconds after the person presses Done (or after 8 hours).
@@ -92,6 +94,7 @@ PAGE = r'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name
 *{box-sizing:border-box;margin:0}html{-webkit-text-size-adjust:100%}
 body{background:var(--bg);color:var(--ink);font:17px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:660px;margin:0 auto;padding:0 24px 140px}
+.wrap{position:relative}.back{position:absolute;left:24px;top:24px;color:var(--mute);font-size:14px;padding:4px 0}.back:hover{color:var(--ink)}
 .dots{display:flex;gap:8px;justify-content:center;padding:34px 0 54px}.dots i{width:6px;height:6px;border-radius:50%;background:var(--line);transition:.3s}.dots i.on{background:var(--ink)}
 h1{font-size:34px;line-height:1.15;font-weight:650;letter-spacing:-.025em;margin-bottom:34px}
 .lab{font-size:13px;color:var(--mute);margin:34px 0 12px}
@@ -124,11 +127,12 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border:0;border-radiu
 @keyframes sl{from{background-position:100% 0}to{background-position:-50% 0}}
 video{display:block;width:100%;max-width:300px;margin:0 auto 26px;border-radius:16px;background:#000;aspect-ratio:9/16}
 .path{font-size:13px;color:var(--mute);text-align:center;word-break:break-all;margin-top:14px}
-</style></head><body><div class="wrap"><div class="dots" id="dots"></div><div id="app"></div></div>
+</style></head><body><div class="wrap"><button class="back" id="back" hidden>Back</button><div class="dots" id="dots"></div><div id="app"></div></div>
 <script>
 const app=document.getElementById('app'),dots=document.getElementById('dots');let cur=null,rev=-1;
 const STEP={upload:0,transcribing:0,suggesting:0,brief:1,recommending:1,highlight:2,music:3,editing:4,review:4,done:4,error:0};
-const WAIT={transcribing:1,suggesting:1,recommending:1,editing:1};
+const WAIT={transcribing:1,suggesting:1,recommending:1,editing:1};const BACK={highlight:1,music:1,review:1};
+const back=document.getElementById('back');back.onclick=()=>{back.hidden=true;document.querySelectorAll('audio,video').forEach(m=>m.pause());post('/back')};
 const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
 const post=(u,b)=>fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});
 const go=(label,fn,alt)=>{let g=document.querySelector('.go');if(!g){g=el('div','go');app.append(g)}const b=el('button','btn'+(alt?' alt':''),label);b.onclick=()=>fn(b);g.append(b);return b};
@@ -176,7 +180,7 @@ const V={
   rs.onclick=()=>{els.forEach(e=>e.classList.toggle('on',on.has(e.dataset.key)));draw()};
   const b=go('Continue',async()=>{b.disabled=true;await post('/marks',{keys:els.filter(e=>e.classList.contains('on')).map(e=>e.dataset.key)})});draw()},
 
- async music(){const D=await (await fetch('/data')).json();let choice=D.choice||{type:D.tracks.length?'track':'none',id:(D.tracks[0]||{}).id};const au=new Audio();let playing=null;
+ async music(){const D=await (await fetch('/data')).json();let choice=D.choice||{type:D.tracks.length?'track':'none',id:(D.tracks[0]||{}).id};const au=new Audio();let playing=null;back.addEventListener('click',()=>au.pause(),{once:true});
   app.append(el('h1','','Music'));const rows=[];
   const sel=(r,c)=>{rows.forEach(x=>x.classList.remove('on'));r.classList.add('on');choice=c};
   const row=(title,c,src)=>{const r=el('div','row');r.append(el('span','rad'),el('span','t',title));
@@ -201,7 +205,7 @@ const V={
  error(s){app.append(el('h1','','Something went wrong'),el('div','path',s.msg))}
 };
 async function tick(){try{const s=await (await fetch('/state',{cache:'no-store'})).json();
-  if(s.stage!==cur||(s.stage==='review'&&s.rev!==rev)){cur=s.stage;rev=s.rev;app.innerHTML='';setDots(STEP[cur]??0);window.scrollTo(0,0);
+  if(s.stage!==cur||(s.stage==='review'&&s.rev!==rev)){cur=s.stage;rev=s.rev;app.innerHTML='';setDots(STEP[cur]??0);back.hidden=!BACK[cur];window.scrollTo(0,0);
    if(WAIT[cur])app.append(el('div','wait',s.msg));else await V[cur](s)}
   else if(WAIT[cur]){const w=app.querySelector('.wait');if(w&&w.textContent!==s.msg)w.textContent=s.msg}
  }catch(e){}setTimeout(tick,1000)}
@@ -345,13 +349,17 @@ def main():
                 set_state(project, 'transcribing', 'Listening to the talk')
             elif path == '/brief':
                 brief = read_json(os.path.join(project, 'brief.json'), {})
+                old = dict(brief)
                 brief.update({'audience': str(req.get('audience', '')).strip(), 'goal': str(req.get('goal', '')),
                               'length_seconds': max(15, min(60, int(req.get('length_seconds', 45))))})
                 write_json(os.path.join(project, 'brief.json'), brief)
-                for stale in ('marks.json', 'recommend.json'):       # a new brief means a new recommendation
-                    if os.path.exists(os.path.join(project, stale)):
-                        os.remove(os.path.join(project, stale))
-                set_state(project, 'recommending', 'Choosing the lines')
+                if brief == old and os.path.exists(os.path.join(project, 'recommend.json')):
+                    set_state(project, 'highlight')              # came back and changed nothing: keep their lines
+                else:
+                    for stale in ('marks.json', 'recommend.json'):   # a new brief means a new recommendation
+                        if os.path.exists(os.path.join(project, stale)):
+                            os.remove(os.path.join(project, stale))
+                    set_state(project, 'recommending', 'Choosing the lines')
             elif path == '/marks':
                 _, index = chunk_index()
                 marks = []
@@ -359,9 +367,11 @@ def main():
                     if key in index:
                         cid, c = index[key]
                         marks.append({'clip': cid, **{k: c[k] for k in ('k', 'w0', 'w1', 'start', 'end', 'text')}})
+                old = read_json(os.path.join(project, 'marks.json'))
+                same = bool(old) and [(m['clip'], m['k']) for m in old['marks']] == [(m['clip'], m['k']) for m in marks]
                 write_json(os.path.join(project, 'marks.json'), {'saved': datetime.datetime.now().isoformat(timespec='seconds'),
                                                                  'note': '', 'marks': marks})
-                set_state(project, 'music')
+                set_state(project, 'music', dirty=get_state(project).get('dirty', True) or not same)
             elif path == '/music':
                 if req.get('type') == 'own':
                     saved = read_json(os.path.join(project, 'music.json'), {})
@@ -371,13 +381,17 @@ def main():
                 else:
                     req = {'type': 'none'}
                 write_json(os.path.join(project, 'music.json'), req)
-                set_state(project, 'editing', 'Editing')
+                set_state(project, 'editing', 'Editing', reason='lines' if get_state(project).get('dirty', True) else 'music')
             elif path == '/notes':
                 notes = read_json(os.path.join(project, 'notes.json'), [])
                 notes.append({'time': datetime.datetime.now().isoformat(timespec='seconds'), 'text': str(req.get('text', '')).strip(),
                               'handled': False})
                 write_json(os.path.join(project, 'notes.json'), notes)
-                set_state(project, 'editing', 'Editing')
+                set_state(project, 'editing', 'Editing', reason='notes')
+            elif path == '/back':
+                prev = {'highlight': 'brief', 'music': 'highlight', 'review': 'music'}.get(get_state(project)['stage'])
+                if prev:
+                    set_state(project, prev)
             elif path == '/done':
                 set_state(project, 'done')
             else:

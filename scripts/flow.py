@@ -24,7 +24,8 @@ def main():
         while time.time() < deadline:
             st = A.get_state(project)
             if st['stage'] in rest or st['stage'] == 'error':
-                print(f"STAGE {st['stage']} {st.get('msg', '')}".strip(), flush=True)
+                why = f" reason={st.get('reason', 'lines')}" if st['stage'] == 'editing' else ''
+                print(f"STAGE {st['stage']}{why}", flush=True)
                 return
             time.sleep(1)
         sys.exit('TIMEOUT: the person did not finish this step. Ask them, then wait again.')
@@ -34,6 +35,8 @@ def main():
             i = rest.index('--video')
             extra['video'] = os.path.abspath(rest[i + 1]).replace('\\', '/')
             del rest[i:i + 2]
+        if rest[0] == 'review':
+            extra['dirty'] = False                 # the render on screen matches the saved lines
         st = A.set_state(project, rest[0], rest[1] if len(rest) > 1 else '', **extra)
         print(f"STAGE {st['stage']}", flush=True)
     elif cmd == 'transcript':

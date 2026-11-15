@@ -50,6 +50,13 @@ The page moves through stages; `state.json` holds the current one. You never pol
 | review | person | watches; sends notes (back to editing) or presses Done |
 | done | | app closes |
 
+The page has a Back link (highlight → brief, music → highlight, review → music), so a stage can come round again.
+`wait` prints `STAGE editing reason=...` so you know why you are editing:
+- `lines`: first build, or they changed the highlighted lines. Run Step 4 again (`draft.py --force`; copy the
+  `cx`/`cy`/`zoom` you already worked out for the same clips from the old `trailer.json` before overwriting it).
+- `music`: only the music changed. Render again (about 1 minute), nothing else.
+- `notes`: Step 7.
+
 First wait: `PY SK/scripts/flow.py wait <project> suggesting`. A stage of `error` ends any wait: read the message.
 
 ## Step 2: `suggesting` → audience suggestions
@@ -104,6 +111,19 @@ with `"hit": 0.55`; then one short stinger shot; then the end card with `sub` = 
 (speaker + slide), `zoom` so no audience heads are inside the window (1080x640 at zoom 1; zoom 2 is the limit for
 1080p). Two shots in a row from the same clip: give the second a different zoom (1.15-1.3). Then delete
 `"framed": false`.
+
+**Techniques the renderer gives you** (use them on purpose, not everywhere):
+- *Spoken-word highlight*: the word being said turns gold in the caption. On by default (`"karaoke": false` off).
+- *Card slam + number roll*: every card lands with a scale overshoot and a one-frame flash; a `big` that starts
+  with a number of 10 or more rolls up from 0 ("$110,000", "99 YEARS"). `"count": false` / `"flash": false` per card.
+- *Punch-in on the key word*: split a shot where the important number or claim starts and give the second half
+  `"cont": true` plus a higher `zoom` (+0.25 to +0.35) and, if needed, a different `cx`/`cy`. Picture jumps closer,
+  voice continues without a gap (the join is snapped to a frame). Two or three per video at most; the same trick
+  cuts to a close-up of the slide while he keeps talking.
+- *Progress line*: a thin gold line under the window fills as the video plays. `"progress": false` to remove.
+- *Name tag*: `"speaker": {"name": "...", "title": "..."}` at the top level shows a lower third on the first shot
+  for 3.5s. Only with a name and title the person gave you.
+- *Music*: ducks under the voice and swells on the cards by itself.
 
 **Captions** are `[source_time, "text"]`, one per phrase, time = start of its first word:
 - A caption ends where the speaker's phrase ends. Never let the last word of a phrase fall into the next caption
