@@ -41,17 +41,27 @@ LOCK = threading.Lock()
 
 
 def read_json(path, default=None):
-    try:
-        with open(path, encoding='utf-8') as f:
-            return json.load(f)
-    except (OSError, ValueError):
-        return default
+    for attempt in range(8):                      # a writer may be replacing the file this very moment
+        try:
+            with open(path, encoding='utf-8') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return default
+        except (OSError, ValueError):
+            time.sleep(0.05)
+    return default
 
 
 def write_json(path, obj):
-    tmp = path + '.tmp'
+    tmp = f'{path}.{os.getpid()}.{threading.get_ident()}.tmp'
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(obj, f, indent=1, ensure_ascii=False)
+    for attempt in range(40):                     # Windows refuses to replace a file another process has open
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            time.sleep(0.05)
     os.replace(tmp, path)
 
 
@@ -75,9 +85,10 @@ def tracks():
 
 def chunk_index(project):
     src, words = W.load(project)
+    fixes = W.fixes(project)
     clips, index = [], {}
     for cid in src:
-        ch = W.chunks(words.get(cid, []))
+        ch = W.chunks(words.get(cid, []), fixes)
         for c in ch:
             index[f'{cid}:{c["k"]}'] = (cid, c)
         clips.append({'id': cid, 'chunks': [{k: c[k] for k in ('k', 'start', 'end', 'text', 'para')} for c in ch]})

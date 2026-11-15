@@ -20,6 +20,16 @@ def load(project):
     return src, words
 
 
+def fixes(project):
+    """<project>/fixes.json: [["BTOQ", "BTO queue"], ...]  mis-heard words and their correction, applied to every
+    phrase the person sees and to the captions made from them. Whole words only, case-sensitive."""
+    p = os.path.join(project, 'fixes.json')
+    if not os.path.exists(p):
+        return []
+    with open(p, encoding='utf-8') as f:
+        return [(a, b) for a, b in json.load(f) if a]
+
+
 def tidy(ws):
     """Whisper splits "$130 ,000" and "3 %" into two tokens: glue the stray piece back onto the word before it."""
     out = []
@@ -31,7 +41,13 @@ def tidy(ws):
     return out
 
 
-def chunks(ws):
+def corrected(text, fix):
+    for a, b in fix:
+        text = re.sub(r'(?<![\w$])' + re.escape(a) + r'(?![\w%])', lambda m: b, text)
+    return text
+
+
+def chunks(ws, fix=()):
     """[{k, w0, w1, start, end, text, para}]  (w1 inclusive; para=True starts a new paragraph on the page)"""
     out, cur = [], []
     for i, w in enumerate(ws):
@@ -47,7 +63,7 @@ def chunks(ws):
             a, b = cur[0], cur[-1]
             prev_end = ws[a - 1]['end'] if a else -9
             out.append({'k': len(out), 'w0': a, 'w1': b, 'start': ws[a]['start'], 'end': ws[b]['end'],
-                        'text': ' '.join(ws[j]['text'] for j in cur),
+                        'text': corrected(' '.join(ws[j]['text'] for j in cur), fix),
                         'para': a == 0 or ws[a]['start'] - prev_end > 1.2 or bool(re.search(r'[.?!]$', ws[a - 1]['text']))
                         and len(out) % 4 == 0})
             cur = []

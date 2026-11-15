@@ -5,6 +5,7 @@
   PY flow.py set <project> <stage> [message] [--video <path> ...]   move the page on (one --video per finished video)
   PY flow.py transcript <project>                   every phrase with its key, start time and length (for plan.json)
   PY flow.py videos <project>                       the videos to make: folder, title, highlighted seconds, changed?
+  PY flow.py status <project>                       the stage an existing session is at and whose move it is
 Run `wait` in the background and act when it exits; never poll.
 """
 import json
@@ -63,10 +64,16 @@ def main():
         total = 0
         for cid in src:
             print(f'\n== {cid}  {os.path.basename(src[cid])}')
-            for c in W.chunks(words.get(cid, [])):
+            for c in W.chunks(words.get(cid, []), W.fixes(project)):
                 total += c['end'] - c['start']
                 print(f"{cid}:{c['k']:<4} {c['start']:7.2f}  {c['end'] - c['start']:4.1f}s  {c['text']}")
         print(f'\nTOTAL SPEECH {total:.0f}s in {len(src)} clips')
+    elif cmd == 'status':                          # where a session stands, and whose move it is
+        st = A.get_state(project)
+        mine = {'suggesting': 'write suggest.json and fixes.json, then set brief', 'planning': 'write plan.json, then set plan',
+                'editing': f"build the videos (reason={st.get('reason', 'lines')}), then set review"}
+        print(f"STAGE {st['stage']}  |  " + (f"YOUR MOVE: {mine[st['stage']]}" if st['stage'] in mine else
+                                              'finished' if st['stage'] == 'done' else "the person's move: start app.py on this folder and wait"))
     elif cmd == 'videos':
         for i, v in enumerate(A.videos(project)):
             d = A.vdir(project, i)

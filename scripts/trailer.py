@@ -209,7 +209,8 @@ def render_shot(P, it, src, win, o, opts):
         f.write(f"file '{T.fp(last)}'\n")
     z = it.get('zoom', 1.0)
     w, hh = T.probe_size(vsrc)
-    cw, ch = round(CW / z / 2) * 2, round(win['h'] / z / 2) * 2
+    full = min(w, hh * CW / win['h'])             # zoom 1 = the widest window-shaped crop this footage allows (1080p or 4K)
+    cw, ch = round(full / z / 2) * 2, round(full * win['h'] / CW / z / 2) * 2
     x = max(0, min(w - cw, round(it['cx'] - cw / 2)))
     y = max(0, min(hh - ch, round(it['cy'] - ch / 2)))
     push = it.get('push', 0.05)
@@ -369,8 +370,9 @@ def main():
         shots_png.append(f)
     cols = 8
     lay = '|'.join(f'{(i % cols) * 270}_{(i // cols) * 480}' for i in range(len(shots_png)))
+    stack = f'xstack=inputs={len(shots_png)}:layout={lay}:fill=black' if len(shots_png) > 1 else 'null'   # xstack needs 2+
     subprocess.run(['ffmpeg', '-v', 'error', '-y', *[x for f in shots_png for x in ('-i', f)], '-filter_complex',
-                    f'xstack=inputs={len(shots_png)}:layout={lay}:fill=black', os.path.join(P, 'work', 'qa.jpg')], check=True)
+                    stack, '-frames:v', '1', '-update', '1', os.path.join(P, 'work', 'qa.jpg')], check=True)
     for f in shots_png:
         os.remove(f)
     print(f'DONE {out} ({total:.1f}s)\nPHONE {phone}\nQA {os.path.join(P, "work", "qa.jpg")}')

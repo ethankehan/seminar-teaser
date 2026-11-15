@@ -26,6 +26,11 @@ one command per call, no `&&`, no `~` inside arguments. In PowerShell put `&` in
 **One heavy process at a time.** Never run two renders, two transcriptions, or sub-agents in parallel.
 
 ## Step 1: open the page
+**Continuing an earlier session?** If the person says so, or `<home>/seminar-videos/` holds a folder they mean,
+run `PY SK/scripts/flow.py status <that folder>`: it prints the stage and whose move it is. Start `app.py` on that
+folder again (it resumes where it stopped) and pick up from that stage. A page stuck on "Editing" means the
+previous session ended before finishing: the move is yours.
+
 Project folder: `<home>/seminar-videos/<YYYYMMDD-short-slug>`. Start the app in the background (it lives for the
 whole session and exits by itself after the person presses Done):
 `PY SK/scripts/app.py <project>`
@@ -64,7 +69,10 @@ First wait: `PY SK/scripts/flow.py wait <project> suggesting`. A stage of `error
 
 ## Step 2: `suggesting` → audience suggestions
 `PY SK/scripts/flow.py transcript <project>` prints every phrase with its key (`c1:14`), start time and length.
-Read all of it. Write `<project>/suggest.json`: `{"audiences": ["...", "...", "..."]}`: three, at most four,
+Read all of it. First write `<project>/fixes.json` for words the transcription clearly got wrong, so the person
+never sees them: `[["BTOQ", "BTO queue"], ["introsa", "interest rate"]]` (whole words, case-sensitive; names,
+terms and acronyms of the field; only where the context leaves no doubt). Run `transcript` again to check.
+Then write `<project>/suggest.json`: `{"audiences": ["...", "...", "..."]}`: three, at most four,
 concrete groups this talk would actually matter to, each under ~45 characters, most likely first, in the language
 of the talk. Then `PY SK/scripts/flow.py set <project> brief` and wait for `planning`.
 
@@ -138,8 +146,8 @@ with `"hit": 0.55`; then one short stinger shot; then the end card with `sub` = 
 `"fade_out": 0.6`. Short videos (under 25s): one or two cards plus the end card is enough.
 
 **Framing** each shot from `work/framing.jpg` (grid labels are source pixels): `cx`, `cy` = centre of the stage
-(speaker + slide), `zoom` so no audience heads are inside the window (1080x640 at zoom 1; zoom 2 is the limit for
-1080p). Two shots in a row from the same clip: give the second a different zoom (1.15-1.3). Then delete
+(speaker + slide), `zoom` so no audience heads are inside the window. Zoom 1 shows the full width of the footage;
+keep zoom at 2 or below for 1080p footage and 4 or below for 4K. Two shots in a row from the same clip: give the second a different zoom (1.15-1.3). Then delete
 `"framed": false`.
 
 **Techniques: choose, do not stack.** `SK/references/techniques.md` is the library: structure, openings, cuts,
