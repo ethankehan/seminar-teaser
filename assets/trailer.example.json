@@ -1,0 +1,21 @@
+{
+ "name": "example-trailer",
+ "budget": 60,
+ "window": {"y": 600, "h": 640},
+ "bed": true,
+ "brief": {"audience": "First-time home buyers", "goal": "Sign-ups", "length_seconds": 45, "event": "The Home Loan Workshop"},
+ "items": [
+  {"type": "shot", "id": "hook", "clip": "c1", "in": 12.40, "out": 16.10, "cx": 540, "cy": 760, "zoom": 1.0,
+   "captions": [[12.47, "Most people pick the wrong loan"], [14.20, "in the first five minutes."]]},
+
+  {"type": "card", "id": "c_rate", "seconds": 1.1, "kicker": "Over 25 years", "big": "$48,000"},
+  {"type": "shot", "id": "rate", "clip": "c2", "in": 88.02, "out": 94.30, "cx": 560, "cy": 740, "zoom": 1.15,
+   "captions": [[88.09, "A half-percent difference"], [89.90, "costs you $48,000 over 25 years."]]},
+
+  {"type": "card", "id": "title", "seconds": 2.8, "kicker": "Coming soon", "big": "THE HOME LOAN WORKSHOP", "hit": 0.55, "push": 0.1},
+  {"type": "shot", "id": "stinger", "clip": "c2", "in": 131.60, "out": 132.70, "cx": 600, "cy": 740, "zoom": 1.3, "push": 0.03,
+   "captions": [[131.67, "Don't sign before you know this."]]},
+  {"type": "card", "id": "end", "seconds": 2.2, "kicker": "Coming soon", "big": "THE HOME LOAN WORKSHOP", "sub": "Follow for the date",
+   "hit": 0.3, "push": 0.04, "fade_out": 0.6}
+ ]
+}

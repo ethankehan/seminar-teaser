@@ -1,0 +1,64 @@
+# seminar-teaser
+
+A Claude Code skill that turns seminar or talk footage into a short, trailer-style social video.
+
+You answer three questions (who the video is for, what it should achieve, how long), highlight the lines you want
+on a page that opens in your browser, and Claude cuts, crops out the audience, cleans the audio, adds subtitles and
+number cards, and hands you the video. Then you give notes and it re-renders in about a minute.
+
+Everything runs on your own computer. No footage is uploaded and nothing is paid for per use.
+
+## What you need
+- [Claude Code](https://claude.com/claude-code)
+- Python 3.9 or newer
+- ffmpeg
+
+| | macOS | Windows (PowerShell) |
+|---|---|---|
+| ffmpeg | `brew install ffmpeg` | `winget install --id Gyan.FFmpeg -e` |
+| Python | `brew install python` | `winget install --id Python.Python.3.12 -e` |
+
+On Windows, quit Claude Code completely and reopen it after installing either of these.
+
+## Install
+macOS:
+```bash
+git clone https://github.com/ethankehan/seminar-teaser.git ~/.claude/skills/seminar-teaser
+```
+Windows (PowerShell):
+```powershell
+git clone https://github.com/ethankehan/seminar-teaser.git "$env:USERPROFILE\.claude\skills\seminar-teaser"
+```
+Restart Claude Code. The first run sets itself up (about 2 minutes) and downloads a speech-recognition model
+(about 0.5 GB) the first time it transcribes.
+
+Update later with `git pull` inside that folder.
+
+## Use
+In Claude Code, type:
+```
+/seminar-teaser
+```
+and say where the clips are, for example "the clips are in Downloads/seminar-nov". Then:
+1. Claude asks who the video is for, what you want from it (follows, likes and shares, comments, sign-ups) and how long.
+2. A page opens in your browser with the transcript. Click the lines you want, watch the seconds counter, press **Done**.
+3. Claude builds the video and gives you the file. Tell it what to change.
+
+Footage that works best: vertical phone video of one speaker in front of slides, filmed from as close as possible.
+
+## Good to know
+- 60 seconds is the upper limit. If you highlight more than fits, Claude asks which lines to drop or offers a series.
+- Claude cannot hear. Listen to the result once and tell it if the hits or the background drone should be louder,
+  softer or gone.
+- The background drone is a placeholder. Adding a track in Instagram or CapCut when you post gives a much stronger
+  trailer feel.
+- Transcripts of live rooms contain mistakes. Claude fixes obvious ones and cuts around words it cannot make out.
+
+## Not working?
+Ask Claude to "run the seminar-teaser setup and tell me what is missing". It prints the exact command to fix it.
+
+## Credits
+- Fonts: DM Serif Display, Inter, Montserrat (SIL Open Font License, see `assets/fonts/OFL.txt`).
+- Noise reduction model `assets/sh.rnnn`: from [GregorR/rnnoise-models](https://github.com/GregorR/rnnoise-models).
+- Sound effects are not stored in this repository. Setup downloads two files from a Pixabay-licensed pack, which
+  may be used inside videos but not redistributed as files.

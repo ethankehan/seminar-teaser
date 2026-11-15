@@ -1,0 +1,6 @@
+.venv/
+.platform.json
+__pycache__/
+*.pyc
+.DS_Store
+assets/sfx/*.mp3
