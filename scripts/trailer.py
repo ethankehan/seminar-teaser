@@ -42,36 +42,40 @@ def caption_png(path, win, text, active=None, tag=None, hook=None):
     im = Image.new('RGBA', (CW, CH), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
     if text:
-        f = T.font('Inter-600-normal', 44)
+        f = T.font('Inter-600-normal', 44, text)
         y = win['y'] + win['h'] + 64
         idx = 0
         for ln in T.balanced(d, text, f, T.CAP_W) or T.wrap(d, text, f, T.CAP_W):
             x = 540 - d.textlength(ln, font=f) / 2
-            for tok in ln.split():
+            toks = W.tokens(ln)
+            for j, tok in enumerate(toks):
                 d.text((x, y), tok, font=f, fill=HOT if idx == active else (255, 255, 255, 240), anchor='la')
-                x += d.textlength(tok + ' ', font=f)
+                gap = ' ' if j + 1 < len(toks) and not (W.has_cjk(toks[j + 1][0]) or W.has_cjk(tok[-1])) else ''
+                x += d.textlength(tok + gap, font=f)
                 idx += 1
             y += 56
     if hook:                                        # the opening claim, big, in the band above the window
-        fh = T.font('DMSerifDisplay-400-normal', 68)
+        fh = T.font('DMSerifDisplay-400-normal', 68, hook)
         lines = T.wrap(d, hook, fh, 960)[:3]
         y = win['y'] - 128 - 76 * len(lines)
         for ln in lines:
             d.text((540, y), ln, font=fh, fill=T.CREAM, anchor='ma')
             y += 76
     if tag and tag.get('name'):                     # lower third in the black band above the window
-        fn, ft = T.font('Montserrat-600-normal', 31), T.font('Montserrat-600-normal', 24)
+        fn = T.font('Montserrat-600-normal', 31, tag['name'])
+        ft = T.font('Montserrat-600-normal', 24, tag.get('title', ''))
+        sp = lambda t: t if W.has_cjk(t) else ' '.join(t.upper())      # noqa: E731  tracked caps for Latin only
         y = win['y'] - (80 if tag.get('title') else 50)
         d.line([(44, y + 4), (44, win['y'] - 22)], fill=T.GOLD, width=3)
-        d.text((62, y), ' '.join(tag['name'].upper()), font=fn, fill=T.CREAM, anchor='la')
+        d.text((62, y), sp(tag['name']), font=fn, fill=T.CREAM, anchor='la')
         if tag.get('title'):
-            d.text((62, y + 42), ' '.join(tag['title'].upper()), font=ft, fill=T.GOLD, anchor='la')
+            d.text((62, y + 42), sp(tag['title']), font=ft, fill=T.GOLD, anchor='la')
     im.save(path)
 
 
 def fit(d, text, name, size, maxw):
     while size > 20:
-        f = T.font(name, size)
+        f = T.font(name, size, text)
         if d.textlength(text, font=f) <= maxw:
             return f
         size -= 4
@@ -84,16 +88,28 @@ def card_layer(it, big, size=None):
     im = Image.new('RGB', (CW * S, CH * S), (0, 0, 0))
     d = ImageDraw.Draw(im)
     cx, cy = CW * S // 2, CH * S // 2 - 40 * S
-    fb = T.font('DMSerifDisplay-400-normal', size) if size else fit(d, big, 'DMSerifDisplay-400-normal', 250 * S, 940 * S)
+    sp = lambda t: t if W.has_cjk(t) else ' '.join(t.upper())          # noqa: E731  tracked caps for Latin only
+    fb = (T.font('DMSerifDisplay-400-normal', size, big) if size
+          else fit(d, big, 'DMSerifDisplay-400-normal', (190 if W.has_cjk(big) else 250) * S, 940 * S))
+    bh = fb.size * (0.75 if W.has_cjk(big) else 0.62)
     if it.get('kicker'):
-        fk = T.font('Montserrat-600-normal', 34 * S)
-        d.text((cx, cy - fb.size * 0.62 - 40 * S), ' '.join(it['kicker'].upper()), font=fk, fill=T.GOLD[:3], anchor='mm')
+        fk = T.font('Montserrat-600-normal', 34 * S, it['kicker'])
+        d.text((cx, cy - bh - 40 * S), sp(it['kicker']), font=fk, fill=T.GOLD[:3], anchor='mm')
     d.text((cx, cy), big, font=fb, fill=T.CREAM[:3], anchor='mm')
+    y = cy + bh
     if it.get('sub'):
-        fs = T.font('Montserrat-600-normal', 30 * S)
-        d.line([(cx - 40 * S, cy + fb.size * 0.62 + 30 * S), (cx + 40 * S, cy + fb.size * 0.62 + 30 * S)],
-               fill=(214, 196, 150), width=2 * S)
-        d.text((cx, cy + fb.size * 0.62 + 84 * S), ' '.join(it['sub'].upper()), font=fs, fill=(235, 232, 226), anchor='mm')
+        fs = T.font('Montserrat-600-normal', 30 * S, it['sub'])
+        d.line([(cx - 40 * S, y + 30 * S), (cx + 40 * S, y + 30 * S)], fill=T.GOLD[:3], width=2 * S)
+        d.text((cx, y + 84 * S), sp(it['sub']), font=fs, fill=(235, 232, 226), anchor='mm')
+        y += 110 * S
+    if it.get('_handle'):                               # brand: account name under the call to action
+        fh = T.font('Inter-600-normal', 34 * S, it['_handle'])
+        d.text((cx, y + 70 * S), it['_handle'], font=fh, fill=T.GOLD[:3], anchor='mm')
+    if it.get('_logo') and os.path.exists(it['_logo']):  # brand: logo above the text
+        logo = Image.open(it['_logo']).convert('RGBA')
+        lw = 330 * S
+        logo = logo.resize((lw, round(logo.height * lw / logo.width)), Image.LANCZOS)
+        im.paste(logo, (cx - lw // 2, round(cy - bh - 120 * S - logo.height)), logo)
     return im, fb.size
 
 
@@ -161,7 +177,7 @@ def caption_states(it, N, words, opts):
     a, caps = it['in'], it.get('captions', [])
     out = [(0.0, '', None)]
     for (t, text), te in zip(caps, [c[0] for c in caps[1:]] + [it['out']]):
-        toks = text.split()
+        toks = W.tokens(text)
         if not opts.get('karaoke', True) or not toks:
             out.append((t - a - 0.05, text, None))
             continue
@@ -214,6 +230,11 @@ def render_shot(P, it, src, win, o, opts):
     x = max(0, min(w - cw, round(it['cx'] - cw / 2)))
     y = max(0, min(hh - ch, round(it['cy'] - ch / 2)))
     push = it.get('push', 0.05)
+    if opts.get('track'):                           # follow the speaker when they would walk out of this framing
+        import track
+        moving = track.path(vsrc, va, d, w, hh, cw, ch, x, y)
+        if moving:
+            x, y = f"'{moving[0]}'", f"'{moving[1]}'"
     vf = ([] if opts.get('no_in') else ['fade=t=in:d=0.12']) + ([] if opts.get('no_out') else [f'fade=t=out:st={N / 30 - 0.1:.3f}:d=0.1'])
     fc = (f"[0:v]fps=30,setsar=1,crop={cw}:{ch}:{x}:{y},scale={2 * CW}:{2 * win['h']}:flags=lanczos,"
           f"zoompan=z='1+{push}*on/{N}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={CW}x{win['h']}:fps=30,"
@@ -277,21 +298,33 @@ def main():
 
     os.makedirs(os.path.join(P, 'work', 'tr'), exist_ok=True)
     os.makedirs(os.path.join(P, 'renders'), exist_ok=True)
+    global HOT
+    brand = cfg.get('brand') or {}
+    use = brand.get('use', [])
+    if 'color' in use and re.fullmatch(r'#[0-9a-fA-F]{6}', brand.get('color', '')):
+        rgb = tuple(int(brand['color'][i:i + 2], 16) for i in (1, 3, 5))
+        T.GOLD = HOT = rgb + (255,)                  # one accent: kickers, spoken word, progress line, name tag
+    cards = [it for it in items if it['type'] == 'card']
+    if cards and 'logo' in use and brand.get('logo'):
+        cards[-1]['_logo'] = brand['logo']
+    if cards and 'handle' in use and brand.get('handle'):
+        cards[-1]['_handle'] = brand['handle']
     words = W.load(P)[1]
     first_shot = next((it for it in items if it['type'] == 'shot'), None)
     files = []
     for i, it in enumerate(items):
         if it['type'] == 'card':
-            o = os.path.join(P, 'work', 'tr', f"{it.get('id', 'card')}-{h8([it, 'c2'])}.mp4")
+            o = os.path.join(P, 'work', 'tr', f"{it.get('id', 'card')}-{h8([it, 'c3', list(T.GOLD)])}.mp4")
             if not os.path.exists(o):
                 render_card(P, it, o, src)
         else:
             nxt = items[i + 1] if i + 1 < len(items) else {}
             opts = {'karaoke': cfg.get('karaoke', True), 'no_in': bool(it.get('cont') or it.get('_lead')),
-                    'hook': cfg.get('hook') if it is first_shot else None,
+                    'hook': cfg.get('hook') if it is first_shot else None, 'color': list(T.GOLD),
+                    'track': bool(it.get('track', cfg.get('track', True))),
                     'no_out': nxt.get('type') == 'shot' and bool(nxt.get('cont')),
                     'tag': cfg.get('speaker') if it is first_shot and (cfg.get('speaker') or {}).get('name') else None}
-            o = os.path.join(P, 'work', 'tr', f"{it.get('id', 'shot')}-{h8([it, win, opts, 's2'])}.mp4")
+            o = os.path.join(P, 'work', 'tr', f"{it.get('id', 'shot')}-{h8([it, win, opts, 's3'])}.mp4")
             if not os.path.exists(o):
                 render_shot(P, it, src[it['clip']], win, o, {**opts, 'words': words.get(it['clip'], []), 'srcs': src})
         files.append(o)
@@ -348,7 +381,7 @@ def main():
         mix.append('[bed]')
         k += 1
     if cfg.get('progress', True):             # thin line under the window that fills as the video plays (shots only)
-        inputs += ['-f', 'lavfi', '-t', f'{total:.3f}', '-i', f'color=c=0xE8D6A6:s={CW}x3:r=30']
+        inputs += ['-f', 'lavfi', '-t', f'{total:.3f}', '-i', 'color=c=0x%02X%02X%02X:s=%dx3:r=30' % (*T.GOLD[:3], CW)]
         en = '+'.join(f'between(t,{starts[i]:.3f},{starts[i] + lens[i]:.3f})' for i, it in enumerate(items) if it['type'] == 'shot')
         vi = fc.index(f'[vc]fade=t=out:st={total - 0.5:.3f}:d=0.5[v]')
         fc[vi] = (f"[vc][{k}:v]overlay=x='-W+W*t/{total:.3f}':y={win['y'] + win['h']}:enable='{en}':shortest=1,"

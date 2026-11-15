@@ -19,6 +19,9 @@ import sys
 
 from PIL import Image, ImageDraw, ImageFont
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import words as W  # noqa: E402
+
 SK = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(SK, 'assets')
 FONTS = os.path.join(ASSETS, 'fonts')
@@ -51,7 +54,10 @@ def dur(f):
                                 **TXT).stdout)
 
 
-def font(name, size):
+def font(name, size, text=''):
+    """The named Latin face, or Noto Sans SC when the text contains Chinese (the Latin faces have no CJK glyphs)."""
+    if W.has_cjk(text) and os.path.exists(os.path.join(FONTS, 'NotoSansSC-Bold.otf')):
+        return ImageFont.truetype(os.path.join(FONTS, 'NotoSansSC-Bold.otf'), round(size * 0.92))
     return ImageFont.truetype(os.path.join(FONTS, name + '.ttf'), size)
 
 
@@ -59,9 +65,9 @@ def balanced(draw, text, f, maxw):
     """1 line if it fits, else the 2-line split with the most even widths. None if it needs 3+ lines."""
     if draw.textlength(text, font=f) <= maxw:
         return [text]
-    words, best = text.split(), None
+    words, best = W.tokens(text), None
     for i in range(1, len(words)):
-        a, b = ' '.join(words[:i]), ' '.join(words[i:])
+        a, b = W.join(words[:i]), W.join(words[i:])
         wa, wb = draw.textlength(a, font=f), draw.textlength(b, font=f)
         if wa <= maxw and wb <= maxw and (best is None or abs(wa - wb) < best[0]):
             best = (abs(wa - wb), [a, b])
@@ -71,11 +77,12 @@ def balanced(draw, text, f, maxw):
 def lint(cfg):
     """The caption rules that came from real feedback. Returns a list of problems."""
     d = ImageDraw.Draw(Image.new('RGBA', (10, 10)))
-    f, bad = font('Inter-600-normal', CAP_SIZE), []
+    bad = []
     for s in cfg['segments']:
         caps = s.get('captions', [])
         for i, (t, text) in enumerate(caps):
             words = text.split()
+            f = font('Inter-600-normal', CAP_SIZE, text)
             where = f"{s['id']} caption {i + 1} \"{text}\""
             if not (s['in'] - 0.01 <= t < s['out']):
                 bad.append(f'{where}: time {t} is outside the segment {s["in"]}-{s["out"]}')
@@ -191,14 +198,13 @@ def draw_state(path, win, kicker, headline, cap, card=None):
 
 
 def wrap(draw, text, f, maxw):
-    lines, cur = [], ''
-    for w in text.split():
-        t = (cur + ' ' + w).strip()
-        if draw.textlength(t, font=f) <= maxw:
-            cur = t
+    lines, cur = [], []
+    for w in W.tokens(text):
+        if draw.textlength(W.join(cur + [w]), font=f) <= maxw:
+            cur.append(w)
         else:
-            lines.append(cur); cur = w
-    return [l for l in lines + [cur] if l]
+            lines.append(W.join(cur)); cur = [w]
+    return [l for l in lines + [W.join(cur)] if l]
 
 
 def main():

@@ -30,8 +30,11 @@ def main():
     subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', video, '-vn', '-ar', '16000', '-ac', '1', wav], check=True)
     vol = subprocess.run(['ffmpeg', '-hide_banner', '-i', video, '-af', 'volumedetect', '-f', 'null', '-'], **TXT).stderr
     levels = ' '.join(re.findall(r'(mean_volume: [-\d.]+ dB|max_volume: [-\d.]+ dB)', vol))
-    model = WhisperModel('small.en', device='cpu', compute_type='int8', cpu_threads=4)
-    segs, _ = model.transcribe(wav, beam_size=5)
+    lf = os.path.join(project, 'language.txt')
+    lang = open(lf, encoding='utf-8').read().strip() if os.path.exists(lf) else 'en'
+    model = WhisperModel('small.en' if lang == 'en' else 'turbo', device='cpu', compute_type='int8', cpu_threads=4)
+    kw = {'en': dict(language='en'), 'zh': dict(language='zh'), 'mixed': dict(language=None, multilingual=True)}.get(lang, {})
+    segs, _ = model.transcribe(wav, beam_size=5, **kw)
     print(f'VIDEO {video}\nLEVELS {levels}\n\nHEARD IN THE RENDER:')
     for s in segs:
         print(f'  {s.start:5.1f}  {s.text.strip()}')

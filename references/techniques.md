@@ -88,6 +88,10 @@ you want. · Built in: a shot with `"mute": true` and no captions.
 **Jump cut inside a sentence.** Remove a filler or a restart and hide it with a zoom change. · "Um", repeated
 words, a restarted sentence. · The join would change the meaning. · Two shots, second one a different `zoom`.
 
+**Follow the speaker.** The crop pans with a speaker who walks, as a camera operator would. · Default; it only
+moves when they would leave the frame. · Slide close-ups and any shot that must stay locked (`"track": false`).
+· Built in.
+
 **Slow push-in.** A barely visible zoom through each shot so nothing is ever still. · Default. · Shots under 1s
 (use `push` 0.03). · Built in: `push`, default 0.05.
 
@@ -132,6 +136,9 @@ to turn the story. · When a number card is available; too many copy cards break
 
 **Progress line.** A thin line that fills as the video plays; viewers who see the end is near tend to stay. ·
 Default, 30s+. · Very short videos or when the person finds it distracting (`"progress": false`). · Built in.
+
+**Brand on the last card.** Logo above, account name below, the brand's accent colour throughout. · The person
+switched a brand on. · Never on your own; never a watermark over the footage. · Built in from `brand`.
 
 **Graphics stay quiet.** Text exists to be read once and get out of the way. If a card draws attention to its
 own animation, tone it down.

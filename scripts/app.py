@@ -83,12 +83,43 @@ def tracks():
     return [{'id': t['id'], 'title': t['title']} for t in cat if os.path.exists(os.path.join(MUSIC_DIR, t['id'] + '.mp3'))]
 
 
+VIDEO_EXT = ('.mp4', '.mov', '.m4v', '.mkv', '.avi')
+BRAND_DIR = os.environ.get('SEMINAR_BRAND_DIR') or os.path.join(os.path.expanduser('~'), 'seminar-videos', 'brand')
+
+
+def brand_kit():
+    """The brand lives on this computer, outside the skill folder: name, handle, colour, logo, voice notes."""
+    return read_json(os.path.join(BRAND_DIR, 'brand.json'))
+
+
+def expand(inputs):
+    files = []
+    for p in inputs:
+        if os.path.isdir(p):
+            files += [os.path.join(p, f) for f in sorted(os.listdir(p)) if f.lower().endswith(VIDEO_EXT) and not f.startswith('.')]
+        elif os.path.exists(p):
+            files.append(p)
+    return files
+
+
+def resolution(path):
+    r = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of',
+                        'csv=p=0:s=x', path], capture_output=True, encoding='utf-8', errors='replace').stdout.strip().split('\n')[0]
+    try:
+        w, h = [int(x) for x in r.split('x')[:2]]
+        return w, h
+    except ValueError:
+        return 0, 0
+
+
 def chunk_index(project):
     src, words = W.load(project)
-    fixes = W.fixes(project)
+    fixes, edits = W.fixes(project), W.edits(project)
     clips, index = [], {}
     for cid in src:
         ch = W.chunks(words.get(cid, []), fixes)
+        for c in ch:
+            c['text'] = edits.get(f'{cid}:{c["k"]}', c['text'])
         for c in ch:
             index[f'{cid}:{c["k"]}'] = (cid, c)
         clips.append({'id': cid, 'chunks': [{k: c[k] for k in ('k', 'start', 'end', 'text', 'para')} for c in ch]})
@@ -136,8 +167,11 @@ def prep_video(project, i, title):
 
 
 def transcribe(project, inputs):
-    set_state(project, 'transcribing', 'Listening to the talk')
-    p = subprocess.Popen([sys.executable, os.path.join(HERE, 'ingest.py'), project, *inputs], stdout=subprocess.PIPE,
+    lang = get_state(project).get('language', 'en')
+    set_state(project, 'transcribing', 'Listening to the talk', inputs=inputs)
+    terms = (brand_kit() or {}).get('terms', '')
+    p = subprocess.Popen([sys.executable, os.path.join(HERE, 'ingest.py'), project, *inputs, '--language', lang,
+                          *(['--terms', terms] if terms else [])], stdout=subprocess.PIPE,
                          stderr=subprocess.STDOUT, encoding='utf-8', errors='replace')
     last = ''
     for line in p.stdout:
@@ -184,7 +218,7 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border:0;border-radiu
 .bar span{flex:1;color:var(--mute);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .clip{font-size:12px;color:var(--mute);letter-spacing:.06em;text-transform:uppercase;margin:34px 0 14px;display:flex;align-items:center;gap:12px}.clip:after{content:"";flex:1;height:1px;background:var(--line)}
 .para{display:grid;grid-template-columns:44px 1fr;gap:6px;margin-bottom:14px;line-height:1.85}.para time{font-size:12px;color:var(--mute);padding-top:6px;font-variant-numeric:tabular-nums}
-.ch{cursor:pointer;border-radius:5px;padding:3px 2px;transition:background .12s}.ch:hover{background:var(--soft)}.ch.on{background:var(--hl);color:var(--hlink)}
+.ch{cursor:pointer;border-radius:5px;padding:3px 2px;transition:background .12s}.editing .ch{cursor:text;box-shadow:inset 0 -1px 0 var(--line)}.ch[contenteditable=plaintext-only]{outline:0;background:var(--soft);box-shadow:inset 0 -2px 0 var(--ink)}.ch:hover{background:var(--soft)}.ch.on{background:var(--hl);color:var(--hlink)}
 .row{display:flex;align-items:center;gap:14px;padding:16px 2px;border-bottom:1px solid var(--line);cursor:pointer}
 .row.top{align-items:flex-start;padding:20px 2px}.row.top .rad{margin-top:4px}
 .row .rad{width:20px;height:20px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--line);flex:none;transition:.15s}.row.on .rad{box-shadow:inset 0 0 0 6px var(--ink)}
@@ -199,8 +233,8 @@ video{display:block;width:100%;max-width:300px;margin:0 auto 26px;border-radius:
 </style></head><body><div class="wrap"><button class="back" id="back" hidden>Back</button><div class="dots" id="dots"></div><div id="app"></div></div>
 <script>
 const app=document.getElementById('app'),dots=document.getElementById('dots');let cur=null,rev=-1,idx=-1;
-const STEP={upload:0,transcribing:0,suggesting:0,brief:1,planning:1,plan:2,highlight:2,music:3,editing:4,review:4,done:4,error:0};
-const WAIT={transcribing:1,suggesting:1,planning:1,editing:1};const BACK={plan:1,highlight:1,music:1,review:1};
+const STEP={upload:0,lowres:0,transcribing:0,suggesting:0,brief:1,planning:1,plan:2,highlight:2,music:3,editing:4,review:4,done:4,error:0};
+const WAIT={transcribing:1,suggesting:1,planning:1,editing:1};const BACK={lowres:1,plan:1,highlight:1,music:1,review:1};
 const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
 const post=(u,b)=>fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});
 const data=async()=>(await fetch('/data',{cache:'no-store'})).json();
@@ -211,17 +245,24 @@ const back=document.getElementById('back');back.onclick=()=>{back.hidden=true;do
 function setDots(i){dots.innerHTML='';for(let k=0;k<5;k++)dots.append(el('i',k<=i?'on':''))}
 
 const V={
- upload(){const files=[];app.append(el('h1','','Add your videos'));
+ async upload(){const D=await data();const files=[];let lang=D.language||'en';app.append(el('h1','','Add your videos'));
   const d=el('div','drop','Drop videos here'),inp=el('input');inp.type='file';inp.multiple=true;inp.accept='video/*';inp.hidden=true;
   const list=el('div','files');app.append(d,inp,list);
-  const add=fs=>{for(const f of fs)if(/\.(mp4|mov|m4v|mkv|avi)$/i.test(f.name)&&!files.some(x=>x.name===f.name)){files.push(f);const r=el('div','file');r.append(el('span','',f.name),el('span','',mb(f.size)),el('b'));f.row=r;list.append(r)}b.disabled=!files.length};
+  for(const f of D.files){const r=el('div','file');r.append(el('span','',f.name),el('span','',mb(f.size)));list.append(r)}
+  app.append(el('div','lab','Language'));const lg=el('div','chips');app.append(lg);
+  for(const [k,t] of [['en','English'],['zh','中文'],['mixed','English + 中文']]){const c=el('button','chip'+(k===lang?' on':''),t);c.onclick=()=>{lang=k;[...lg.children].forEach(x=>x.classList.toggle('on',x===c))};lg.append(c)}
+  const add=fs=>{for(const f of fs)if(/\.(mp4|mov|m4v|mkv|avi)$/i.test(f.name)&&!files.some(x=>x.name===f.name)){files.push(f);const r=el('div','file');r.append(el('span','',f.name),el('span','',mb(f.size)),el('b'));f.row=r;list.append(r)}b.disabled=!(files.length||D.files.length)};
   d.onclick=()=>inp.click();inp.onchange=()=>add(inp.files);
   d.ondragover=e=>{e.preventDefault();d.classList.add('over')};d.ondragleave=()=>d.classList.remove('over');
   d.ondrop=e=>{e.preventDefault();d.classList.remove('over');add(e.dataTransfer.files)};
   const b=go('Continue',async()=>{b.disabled=true;d.style.pointerEvents='none';
    for(const f of files)await new Promise((ok,no)=>{const x=new XMLHttpRequest();x.open('PUT','/upload?name='+encodeURIComponent(f.name));
     x.upload.onprogress=e=>{f.row.lastChild.style.width=(100*e.loaded/e.total)+'%'};x.onload=()=>x.status===200?ok():no();x.onerror=no;x.send(f)});
-   await post('/start')});b.disabled=true},
+   await post('/start',{language:lang})});b.disabled=!D.files.length},
+
+ async lowres(){const D=await data();app.append(el('h1','','Low resolution'));
+  for(const f of D.low){const r=el('div','file');r.append(el('span','',f.name),el('span','',f.size));app.append(r)}
+  go('Continue anyway',async b=>{b.disabled=true;await post('/start',{force:true})})},
 
  async brief(){const D=await data();let aud=D.brief.audience||'',goal=D.brief.goal||'',len=D.brief.length_seconds||45;
   app.append(el('h1','','Who is it for?'));const chips=el('div','chips');app.append(chips);
@@ -237,7 +278,25 @@ const V={
   r.oninput=()=>{len=+r.value;o.textContent=len+'s'};L.append(o,r);app.append(L);
   app.append(el('div','lab','Speaker'));const nm=el('input'),ti=el('input');nm.type=ti.type='text';nm.placeholder='Name';ti.placeholder='Title';
   nm.value=D.brief.speaker_name||'';ti.value=D.brief.speaker_title||'';nm.style.marginTop='0';app.append(nm,ti);
-  const b=go('Continue',async()=>{b.disabled=true;await post('/brief',{audience:aud,goal,length_seconds:len,speaker_name:nm.value.trim(),speaker_title:ti.value.trim()})});
+  app.append(el('div','lab','Branding'));const br=el('div','chips'),parts=el('div','chips'),kitBox=el('div');parts.style.marginTop='12px';app.append(br,parts,kitBox);
+  let kit=D.kit,use=new Set(D.brief.brand||[]),on=use.size>0;
+  const drawBrand=()=>{br.innerHTML='';parts.innerHTML='';
+   const none=el('button','chip'+(on?'':' on'),'None');none.onclick=()=>{on=false;kitBox.innerHTML='';drawBrand()};br.append(none);
+   const yes=el('button','chip'+(on?' on':''),kit&&kit.name?kit.name:'Add a brand');
+   yes.onclick=()=>{on=true;if(!use.size)use=new Set(['logo','handle','color']);if(!(kit&&kit.name))editKit();drawBrand()};br.append(yes);
+   if(on){for(const [k,t] of [['logo','Logo on the end card'],['handle','Account name on the end card'],['color','Brand colour']]){
+     const c=el('button','chip'+(use.has(k)?' on':''),t);c.onclick=()=>{use.has(k)?use.delete(k):use.add(k);c.classList.toggle('on')};parts.append(c)}
+    const e=el('button','','Edit');e.style.cssText='color:var(--mute);font-size:14px;padding:0 6px';e.onclick=editKit;parts.append(e)}};
+  const editKit=()=>{kitBox.innerHTML='';const n=el('input'),h=el('input'),c=el('input'),f=el('input'),lr=el('div','row'),sv=el('button','chip','Save');
+   n.type=h.type=c.type='text';n.placeholder='Brand name';h.placeholder='@account';c.placeholder='#D4AF37';f.type='file';f.accept='image/png,image/*';f.hidden=true;
+   n.value=(kit&&kit.name)||'';h.value=(kit&&kit.handle)||'';c.value=(kit&&kit.color)||'';
+   lr.append(el('span','t',kit&&kit.logo?'Replace the logo':'Add a logo (PNG, light version for dark backgrounds)'));lr.onclick=()=>f.click();
+   f.onchange=async()=>{if(!f.files[0])return;lr.firstChild.textContent='Uploading…';await fetch('/brand-logo?name=logo.png',{method:'PUT',body:f.files[0]});kit=Object.assign(kit||{},{logo:true});lr.firstChild.textContent='Logo saved'};
+   sv.style.marginTop='16px';sv.onclick=async()=>{await post('/brand-kit',{name:n.value.trim(),handle:h.value.trim(),color:c.value.trim()});
+    kit=Object.assign(kit||{},{name:n.value.trim(),handle:h.value.trim(),color:c.value.trim()});kitBox.innerHTML='';drawBrand()};
+   kitBox.append(n,h,c,lr,f,sv)};
+  drawBrand();
+  const b=go('Continue',async()=>{b.disabled=true;await post('/brief',{audience:aud,goal,length_seconds:len,speaker_name:nm.value.trim(),speaker_title:ti.value.trim(),brand:on&&kit&&kit.name?[...use]:[]})});
   if(aud)pick(chips,aud,v=>aud=v);if(goal)pick(goals,goal,v=>goal=v);ok()},
 
  async plan(){const D=await data();let id=D.option||D.options[0].id;app.append(el('h1','','How should we cut it?'));const rows=[];
@@ -247,13 +306,18 @@ const V={
   const b=go('Continue',async()=>{b.disabled=true;await post('/plan',{id})})},
 
  async highlight(){const D=await data();const on=new Set(D.selected),els=[];let last=null;
-  app.append(el('h1','','Pick the lines'));const bar=el('div','bar'),n=el('strong'),nm=el('span','',D.n>1?(D.index+1)+' / '+D.n+'   '+D.title:''),rs=el('button','','Reset');bar.append(n,nm,rs);app.append(bar);
+  app.append(el('h1','','Pick the lines'));const bar=el('div','bar'),n=el('strong'),nm=el('span','',D.n>1?(D.index+1)+' / '+D.n+'   '+D.title:''),ed=el('button','','Edit text'),rs=el('button','','Reset');bar.append(n,nm,ed,rs);app.append(bar);let editing=false;
+  ed.onclick=()=>{editing=!editing;ed.textContent=editing?'Done editing':'Edit text';ed.style.color=editing?'var(--ink)':'';app.classList.toggle('editing',editing)};
   const multi=D.clips.length>1;
   D.clips.forEach((c,ci)=>{if(multi)app.append(el('div','clip','Clip '+(ci+1)));let p=null;
    for(const ch of c.chunks){if(ch.para||!p){p=el('div','para');p.append(el('time','',fmt(ch.start)),el('div'));app.append(p)}
     const e=el('span','ch',ch.text);e.dataset.key=c.id+':'+ch.k;e.dataset.d=ch.end-ch.start;e.dataset.i=els.length;if(on.has(e.dataset.key))e.classList.add('on');els.push(e);p.lastChild.append(e,' ')}});
   const draw=()=>{let s=0;for(const e of els)if(e.classList.contains('on'))s+=+e.dataset.d;n.textContent=Math.round(s)+'s / '+D.budget+'s';n.classList.toggle('over',s>D.budget)};
   app.onclick=ev=>{const e=ev.target.closest('.ch');if(!e)return;const i=+e.dataset.i;
+   if(editing){if(e.isContentEditable)return;const before=e.textContent;e.contentEditable='plaintext-only';e.focus();
+    e.onkeydown=k=>{if(k.key==='Enter'){k.preventDefault();e.blur()}if(k.key==='Escape'){e.textContent=before;e.blur()}};
+    e.onblur=async()=>{e.contentEditable='false';const t=e.textContent.trim();if(t===before)return;
+     try{const r=await (await post('/edit',{key:e.dataset.key,text:t})).json();e.textContent=r.text||before}catch(x){e.textContent=before}};return}
    if(ev.shiftKey&&last!==null){for(let k=Math.min(i,last);k<=Math.max(i,last);k++)els[k].classList.add('on')}else e.classList.toggle('on');last=i;draw()};
   rs.onclick=()=>{const rec=new Set(D.recommended);els.forEach(e=>e.classList.toggle('on',rec.has(e.dataset.key)));draw()};
   const b=go('Continue',async()=>{b.disabled=true;await post('/marks',{keys:els.filter(e=>e.classList.contains('on')).map(e=>e.dataset.key)})});draw();
@@ -288,7 +352,7 @@ const V={
  error(s){app.append(el('h1','','Something went wrong'),el('div','path',s.msg))}
 };
 async function tick(){try{const s=await (await fetch('/state',{cache:'no-store'})).json();
-  if(s.stage!==cur||(s.stage==='highlight'&&s.index!==idx)||(s.stage==='review'&&s.rev!==rev)){cur=s.stage;rev=s.rev;idx=s.index;app.innerHTML='';app.onclick=null;setDots(STEP[cur]??0);back.hidden=!BACK[cur];window.scrollTo(0,0);
+  if(s.stage!==cur||(s.stage==='highlight'&&s.index!==idx)||(s.stage==='review'&&s.rev!==rev)){cur=s.stage;rev=s.rev;idx=s.index;app.innerHTML='';app.onclick=null;app.className='';setDots(STEP[cur]??0);back.hidden=!BACK[cur];window.scrollTo(0,0);
    if(WAIT[cur])app.append(el('div','wait',s.msg));else await V[cur](s)}
   else if(WAIT[cur]){const w=app.querySelector('.wait');if(w&&w.textContent!==s.msg)w.textContent=s.msg}
  }catch(e){}setTimeout(tick,1000)}
@@ -305,12 +369,11 @@ def main():
         i = args.index('--clips') + 1
         while i < len(args) and not args[i].startswith('--'):
             clips.append(os.path.abspath(os.path.expanduser(args[i]))); i += 1
+    lang = args[args.index('--language') + 1] if '--language' in args else None
     if not os.path.exists(os.path.join(project, 'state.json')):
-        set_state(project, 'upload')
-        if clips:
-            threading.Thread(target=transcribe, args=(project, clips), daemon=True).start()
+        set_state(project, 'upload', preset=clips, language=lang or 'en')    # the page still asks language and confirms
     elif get_state(project)['stage'] == 'transcribing':        # interrupted run: pick the transcription up again
-        again = clips or [os.path.join(project, 'clips')]
+        again = get_state(project).get('inputs') or clips or [os.path.join(project, 'clips')]
         threading.Thread(target=transcribe, args=(project, again), daemon=True).start()
 
     class H(BaseHTTPRequestHandler):
@@ -384,8 +447,16 @@ def main():
             elif path == '/data':
                 brief = read_json(os.path.join(project, 'brief.json'), {})
                 vs = videos(project)
-                if st['stage'] == 'brief':
-                    self.send_json({'audiences': read_json(os.path.join(project, 'suggest.json'), {}).get('audiences', []), 'brief': brief})
+                if st['stage'] == 'upload':
+                    self.send_json({'language': st.get('language', 'en'), 'files': [
+                        {'name': os.path.basename(f), 'size': os.path.getsize(f)} for f in expand(st.get('preset', []))]})
+                elif st['stage'] == 'lowres':
+                    self.send_json({'low': st.get('low', [])})
+                elif st['stage'] == 'brief':
+                    kit = brand_kit()
+                    self.send_json({'audiences': read_json(os.path.join(project, 'suggest.json'), {}).get('audiences', []), 'brief': brief,
+                                    'kit': kit and {'name': kit.get('name', ''), 'handle': kit.get('handle', ''), 'color': kit.get('color', ''),
+                                                    'logo': bool(kit.get('logo') and os.path.exists(kit['logo']))}})
                 elif st['stage'] == 'plan':
                     _, index = chunk_index(project)
                     opts = []
@@ -410,6 +481,9 @@ def main():
             elif path.startswith('/track/'):
                 tid = re.sub(r'[^\w\-]', '', path[7:])
                 self.send_file(os.path.join(MUSIC_DIR, tid + '.mp3'), 'audio/mpeg')
+            elif path == '/brand-logo':
+                kit = brand_kit() or {}
+                self.send_file(kit.get('logo'), 'image/png')
             elif path == '/video':
                 vids = st.get('videos', [])
                 i = int(q.get('i', ['0'])[0])
@@ -422,6 +496,13 @@ def main():
             if path == '/upload':
                 self.save_stream(os.path.join(project, 'clips'))
                 self.send_json({'ok': True})
+            elif path == '/brand-logo':
+                os.makedirs(BRAND_DIR, exist_ok=True)
+                p, name = self.save_stream(BRAND_DIR)
+                kit = brand_kit() or {}
+                kit['logo'] = p.replace('\\', '/')
+                write_json(os.path.join(BRAND_DIR, 'brand.json'), kit)
+                self.send_json({'ok': True})
             elif path == '/music-upload':
                 p, name = self.save_stream(os.path.join(project, 'music'))
                 write_json(os.path.join(project, 'music.json'), {'type': 'own', 'name': name, 'file': p.replace('\\', '/')})
@@ -433,16 +514,48 @@ def main():
             path, req = urllib.parse.urlparse(self.path).path, self.body_json()
             st = get_state(project)
             if path == '/start':
-                folder = os.path.join(project, 'clips')
-                threading.Thread(target=transcribe, args=(project, [folder]), daemon=True).start()
-                set_state(project, 'transcribing', 'Listening to the talk')
+                inputs = list(st.get('preset', [])) + ([os.path.join(project, 'clips')] if os.path.isdir(os.path.join(project, 'clips')) else [])
+                lang = req.get('language') or st.get('language', 'en')
+                low = []
+                if not req.get('force'):                         # below 1080p on the short side: ask before spending the time
+                    for f in expand(inputs):
+                        w, h = resolution(f)
+                        if 0 < min(w, h) < 1080:
+                            low.append({'name': os.path.basename(f), 'size': f'{w}×{h}'})
+                if low:
+                    set_state(project, 'lowres', language=lang, low=low)
+                else:
+                    set_state(project, 'transcribing', 'Listening to the talk', language=lang)
+                    threading.Thread(target=transcribe, args=(project, inputs), daemon=True).start()
+            elif path == '/edit':
+                _, index = chunk_index(project)
+                key, text = str(req.get('key', '')), ' '.join(str(req.get('text', '')).split())
+                if key in index:
+                    ed = W.edits(project)
+                    if text:
+                        ed[key] = text
+                    else:
+                        ed.pop(key, None)                        # emptied: back to the transcript's wording
+                    write_json(os.path.join(project, 'edits.json'), ed)
+                    set_state(project, st['stage'], st.get('msg', ''), dirty=True)
+                    _, index = chunk_index(project)
+                    return self.send_json({'ok': True, 'text': index[key][1]['text']})
+            elif path == '/brand-kit':
+                os.makedirs(BRAND_DIR, exist_ok=True)
+                kit = brand_kit() or {}
+                color = str(req.get('color', '')).strip()
+                kit.update({'name': str(req.get('name', '')).strip()[:60], 'handle': str(req.get('handle', '')).strip()[:60],
+                            'color': color if re.fullmatch(r'#[0-9a-fA-F]{6}', color) else kit.get('color', '')})
+                write_json(os.path.join(BRAND_DIR, 'brand.json'), kit)
             elif path == '/brief':
                 brief = read_json(os.path.join(project, 'brief.json'), {})
                 old = dict(brief)
                 brief.update({'audience': str(req.get('audience', '')).strip(), 'goal': str(req.get('goal', '')),
                               'length_seconds': max(15, min(60, int(req.get('length_seconds', 45)))),
                               'speaker_name': str(req.get('speaker_name', '')).strip()[:60],
-                              'speaker_title': str(req.get('speaker_title', '')).strip()[:80]})
+                              'speaker_title': str(req.get('speaker_title', '')).strip()[:80],
+                              'brand': [x for x in req.get('brand', []) if x in ('logo', 'handle', 'color')]})
+                brief['brand_kit'] = (brand_kit() or {}) if brief['brand'] else {}
                 write_json(os.path.join(project, 'brief.json'), brief)
                 core = lambda x: [x.get(k) for k in ('audience', 'goal', 'length_seconds')]   # noqa: E731
                 plan = read_json(os.path.join(project, 'plan.json'), {}).get('options', [])
@@ -503,7 +616,9 @@ def main():
             elif path == '/back':
                 stage, n = st['stage'], len(videos(project))
                 many = len(read_json(os.path.join(project, 'plan.json'), {}).get('options', [])) > 1
-                if stage == 'plan':
+                if stage == 'lowres':
+                    set_state(project, 'upload')
+                elif stage == 'plan':
                     set_state(project, 'brief')
                 elif stage == 'highlight':
                     if st.get('index', 0) > 0:

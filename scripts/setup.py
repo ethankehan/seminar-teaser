@@ -18,7 +18,7 @@ VENV = os.path.join(SK, '.venv')
 OSN = {'Darwin': 'macos', 'Windows': 'windows'}.get(platform.system(), 'linux')
 PY = os.path.join(VENV, 'Scripts', 'python.exe') if OSN == 'windows' else os.path.join(VENV, 'bin', 'python')
 # Pinned: PyAV 19 broke faster-whisper 1.2.1 ("unexpected keyword argument 'metadata_errors'").
-PACKAGES = ['faster-whisper==1.2.1', 'av<19', 'pillow>=10']
+PACKAGES = ['faster-whisper==1.2.1', 'av<19', 'pillow>=10', 'opencv-python-headless<5']   # opencv: speaker tracking
 FILTERS = ['arnndn', 'afftdn', 'zoompan', 'xfade', 'loudnorm', 'vignette', 'colorbalance']
 SFX = ['whoosh-short', 'impact-bass-1']
 # Pixabay-licensed pack: fine to use inside videos, not to redistribute as files, so it is fetched, not stored here.

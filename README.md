@@ -40,7 +40,7 @@ In Claude Code, type:
 /seminar-teaser
 ```
 A page opens in your browser:
-1. Drop in your videos.
+1. Drop in your videos and choose the language of the talk (English, 中文, or both).
 2. Choose the audience (Claude suggests a few), the goal and the length.
 3. If there is more good material than one video holds, Claude offers ways to cut it (one video, or a series).
 4. Claude highlights the lines it would use, for each video. Add or remove lines; the counter shows the seconds.
@@ -49,8 +49,21 @@ A page opens in your browser:
 
 Footage that works best: vertical phone video of one speaker in front of slides, filmed from as close as possible.
 
+## Your brand
+On the second page you can switch on a brand: logo and account name on the last card, your colour as the accent.
+Set it up once (name, account, colour, a logo PNG for dark backgrounds); it is kept in a `seminar-videos/brand`
+folder in your home folder on that computer and is never uploaded anywhere. Two optional lines in its
+`brand.json` help: `voice` (how the brand speaks, which Claude then follows) and `terms` (names and words of your
+field, so they are transcribed correctly).
+
+## Updating
+Tell Claude "update the seminar-teaser skill". It pulls the latest version from this page.
+
 ## Good to know
 - 60 seconds is the upper limit.
+- Any resolution works, portrait or landscape. Clips under 1080p bring up a warning first.
+- A speaker who walks is followed automatically.
+- Chinese and mixed talks use a larger speech model: slower, and a 1.6 GB download the first time.
 - Claude cannot hear. Listen once and say if the music or the hits should be louder, softer or gone.
 - Transcripts of live rooms contain mistakes. Claude fixes obvious ones and cuts around words it cannot make out.
 
@@ -62,7 +75,7 @@ The code is released under the MIT License (see `LICENSE`). The bundled fonts an
 their own terms, listed below.
 
 ## Credits
-- Fonts: DM Serif Display, Inter, Montserrat (SIL Open Font License, see `assets/fonts/OFL.txt`).
+- Fonts: DM Serif Display, Inter, Montserrat, Noto Sans SC (SIL Open Font License, see `assets/fonts/OFL.txt`).
 - Noise reduction model `assets/sh.rnnn`: from [GregorR/rnnoise-models](https://github.com/GregorR/rnnoise-models).
 - Music in `assets/music/`: six CC0 (public domain) tracks from OpenGameArt; sources in `assets/music.json`.
 - Sound effects are not stored in this repository. Setup downloads two files from a Pixabay-licensed pack, which

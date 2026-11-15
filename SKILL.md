@@ -34,9 +34,13 @@ previous session ended before finishing: the move is yours.
 Project folder: `<home>/seminar-videos/<YYYYMMDD-short-slug>`. Start the app in the background (it lives for the
 whole session and exits by itself after the person presses Done):
 `PY SK/scripts/app.py <project>`
-- The person already told you where the clips are: add `--clips <folder or files>`; the page then skips the upload
-  step and nothing is copied.
+- The person already told you where the clips are: add `--clips <folder or files>`; the first page lists them
+  and nothing is copied. Add `--language en|zh|mixed` if they told you the language.
 - Otherwise the page opens on "Add your videos" and they drop the files in (copied into `<project>/clips`).
+- Either way the first page asks the language of the talk: English, 中文, or both mixed. English uses a small
+  fast model; Chinese and mixed use a stronger one (about 3x slower, 1.6 GB download the first time).
+- Clips under 1080p on the short side bring up a "Low resolution" page; the person decides to continue or go
+  back. Any resolution and orientation is accepted and framed the same way.
 Tell them one line: a page opened in the browser, follow it. If it did not open, the app printed `APP http://...`.
 
 The page moves through stages; `state.json` holds the current one. You never poll. After each of your turns run
@@ -44,7 +48,8 @@ The page moves through stages; `state.json` holds the current one. You never pol
 
 | Stage | Who | What happens |
 |---|---|---|
-| upload | person | drops videos |
+| upload | person | drops videos, picks the language |
+| lowres | person | only when a clip is under 1080p: continue or go back |
 | transcribing | app | transcribes (about 1 min per minute of footage) |
 | **suggesting** | **you** | read the talk, write audience suggestions |
 | brief | person | audience, goal, length, optional speaker name and title |
@@ -72,6 +77,8 @@ First wait: `PY SK/scripts/flow.py wait <project> suggesting`. A stage of `error
 Read all of it. First write `<project>/fixes.json` for words the transcription clearly got wrong, so the person
 never sees them: `[["BTOQ", "BTO queue"], ["introsa", "interest rate"]]` (whole words, case-sensitive; names,
 terms and acronyms of the field; only where the context leaves no doubt). Run `transcript` again to check.
+The person can also correct any phrase themselves on the "Pick the lines" page ("Edit text"); their wording is
+kept in `edits.json`, wins over yours, and is what the captions use.
 Then write `<project>/suggest.json`: `{"audiences": ["...", "...", "..."]}`: three, at most four,
 concrete groups this talk would actually matter to, each under ~45 characters, most likely first, in the language
 of the talk. Then `PY SK/scripts/flow.py set <project> brief` and wait for `planning`.
@@ -147,8 +154,11 @@ with `"hit": 0.55`; then one short stinger shot; then the end card with `sub` = 
 
 **Framing** each shot from `work/framing.jpg` (grid labels are source pixels): `cx`, `cy` = centre of the stage
 (speaker + slide), `zoom` so no audience heads are inside the window. Zoom 1 shows the full width of the footage;
-keep zoom at 2 or below for 1080p footage and 4 or below for 4K. Two shots in a row from the same clip: give the second a different zoom (1.15-1.3). Then delete
-`"framed": false`.
+keep zoom at 2 or below for 1080p footage and 4 or below for 4K. Two shots in a row from the same clip: give the
+second a different zoom (1.15-1.3). Then delete `"framed": false`.
+The speaker is followed automatically: when they would walk out of your framing the crop pans with them, like a
+camera operator (face tracking; it leaves the shot alone when they stay inside). Frame for where they are at the
+start of the shot. `"track": false` on a shot pins the frame, e.g. for a slide close-up.
 
 **Techniques: choose, do not stack.** `SK/references/techniques.md` is the library: structure, openings, cuts,
 captions, cards, sound, endings, each with when to use it, when to skip it and how to do it here, plus tables by
@@ -167,6 +177,18 @@ per shot `zoom`, `push`, `cont`, `picture`, `jcut`, `mute`; per card `kicker`, `
 - Captions say what was said. Fix mis-heard names and terms, write numbers and money as digits. A word you cannot
   make out even after re-transcribing that snippet: cut around it.
 - `in` = first word - 0.07s, `out` = last word + 0.10s and before the next word starts.
+
+**Brand.** `brief.json` has `brand` (what to apply: `logo`, `handle`, `color`; empty = none) and `brand_kit`
+(name, handle, colour, logo path, `voice`). `draft.py` puts it into `trailer.json` and the renderer does the rest:
+the accent colour replaces gold, the logo and the account name go on the last card. When a brand is on, **read
+`brand_kit.voice` and write to it**: it decides which lines are acceptable, how cards are worded and what the call
+to action says. A brand that asks for reassurance gets no alarmist cards, however well they would perform.
+The kit lives in `<home>/seminar-videos/brand/` on each computer and is edited on the page. Never copy brand
+files, names or colours into the skill folder: the skill is public, the brand is not.
+
+**Chinese and mixed talks.** Everything above holds. Captions break at Chinese punctuation; a caption fits about
+20 characters per line. Card text, hook and name tag can be Chinese (a Chinese font is bundled). Keep each on-screen
+text in the language the speaker used for that line; do not translate.
 
 ## Step 6: render, check, show
 1. `PY SK/scripts/trailer.py <video> --check` until no PROBLEM line and TOTAL fits the length they chose.
@@ -204,7 +226,7 @@ what you dropped and why. You cannot hear the mix: say so once and ask them to l
 ## Files
 `scripts/setup.py` environment · `app.py` the web page and its server · `flow.py` wait / set / transcript ·
 `ingest.py` transcription · `draft.py` marks → first edit · `trailer.py` render · `verify.py` post-render check ·
-`teaser.py` shared helpers and an older plain style · `words.py` phrase chunking.
+`teaser.py` shared helpers and an older plain style · `words.py` phrase chunking · `track.py` speaker tracking.
 `references/techniques.md` the technique library. `assets/music/` six CC0 tracks (five calm, one intense "Trailer") listed in `assets/music.json`. `assets/trailer.example.json` shows the edit format.
 
 ## Gotchas
@@ -215,3 +237,7 @@ what you dropped and why. You cannot hear the mix: say so once and ask them to l
 - A far-back wide angle needs zoom 2 and is visibly softer: prefer lines filmed from closer.
 - The app was restarted or crashed: start it again on the same project; it resumes at the saved stage.
 - Never delete, move or re-encode the person's original clips.
+
+## Updating the skill
+When the person asks to update: `git -C "SK" pull --ff-only`, then run `SK/scripts/setup.py` again and tell them
+what changed (`git -C "SK" log --oneline -5`). Never update on your own in the middle of a session.
