@@ -43,17 +43,20 @@ The page moves through stages; `state.json` holds the current one. You never pol
 | transcribing | app | transcribes (about 1 min per minute of footage) |
 | **suggesting** | **you** | read the talk, write audience suggestions |
 | brief | person | audience, goal, length, optional speaker name and title |
-| **recommending** | **you** | choose the lines for that brief |
-| highlight | person | adjusts your selection |
+| **planning** | **you** | decide how the material should be cut (one video or a series) and choose the lines |
+| plan | person | picks one of your options (skipped when you offer only one) |
+| highlight | person | adjusts your selection, once per video |
 | music | person | picks a track, their own file, or none |
 | **editing** | **you** | build and render, or apply their notes |
 | review | person | watches; sends notes (back to editing) or presses Done |
 | done | | app closes |
 
-The page has a Back link (highlight → brief, music → highlight, review → music), so a stage can come round again.
+The page has a Back link (plan → brief, highlight → previous video / plan / brief, music → highlight, review →
+music), so a stage can come round again.
 `wait` prints `STAGE editing reason=...` so you know why you are editing:
-- `lines`: first build, or they changed the highlighted lines. Run Step 4 again (`draft.py --force`; copy the
-  `cx`/`cy`/`zoom` you already worked out for the same clips from the old `trailer.json` before overwriting it).
+- `lines`: first build, or they changed lines. `flow.py videos` marks each video CHANGED or not: rebuild only the
+  changed ones (Step 4 with `draft.py --force`; first copy the `cx`/`cy`/`zoom` you already worked out for the
+  same clips from the old `trailer.json`).
 - `music`: only the music changed. Render again (about 1 minute), nothing else.
 - `notes`: Step 7.
 
@@ -63,23 +66,49 @@ First wait: `PY SK/scripts/flow.py wait <project> suggesting`. A stage of `error
 `PY SK/scripts/flow.py transcript <project>` prints every phrase with its key (`c1:14`), start time and length.
 Read all of it. Write `<project>/suggest.json`: `{"audiences": ["...", "...", "..."]}`: three, at most four,
 concrete groups this talk would actually matter to, each under ~45 characters, most likely first, in the language
-of the talk. Then `PY SK/scripts/flow.py set <project> brief` and wait for `recommending`.
+of the talk. Then `PY SK/scripts/flow.py set <project> brief` and wait for `planning`.
 
-## Step 3: `recommending` → your version of the highlights
+## Step 3: `planning` → how to cut it, and your lines for each video
 Read `<project>/brief.json` (`audience`, `goal`, `length_seconds`; `speaker_name` / `speaker_title` are optional:
-empty means no name tag, and `draft.py` adds the tag by itself when they are filled). Choose phrases whose lengths add up to at most
-`length_seconds - 8` (cards and the title need the rest; for 15-20s videos leave 5). Apply the editing rules in
-Step 5 already here: the right opening for this audience, the shape for this goal, complete phrases only.
-Write `<project>/recommend.json`: `{"keys": ["c1:1", "c1:13", ...]}`, then
-`PY SK/scripts/flow.py set <project> highlight` and wait for `editing`.
+empty means no name tag, and `draft.py` adds the tag by itself when they are filled). `flow.py transcript` ends
+with TOTAL SPEECH: compare what is worth showing with the length they chose.
 
-## Step 4: `editing`, first time → draft
-The person's final selection is in `marks.json`, the music choice in `music.json` (trailer.py reads it by itself).
-`PY SK/scripts/draft.py <project>` → `trailer.json` (one shot per run of highlighted phrases, one caption per
+Write `<project>/plan.json`:
+```json
+{"options": [
+  {"id": "series", "title": "A series of three", "videos": [
+     {"title": "Applying: timing and odds", "keys": ["c8:60", "c8:61", "c6:44"]},
+     {"title": "Plus and Prime: the catch", "keys": ["c8:104", "c8:105"]},
+     {"title": "Your CPF at key collection", "keys": ["c4:1", "c4:12", "c4:13"]}]},
+  {"id": "one", "title": "One video", "videos": [{"title": "The BTO Seminar", "keys": ["c8:20", "c4:1", "c4:12"]}]}
+]}
+```
+- **The material fits one video** (the good lines for this audience add up to about the chosen length or less):
+  write ONE option with one video. The page skips the plan step.
+- **More good material than one video holds** (many clips, several distinct topics): offer two or three options,
+  the one you recommend first. The usual ones:
+  - *One video*: the strongest lines across everything. Right when the goal is a single trailer or sign-up push.
+  - *A series of N* (2-5): one topic per video, each able to stand alone, each with its own opening and close.
+    Right for follows and when topics serve different viewers. Do not pad: a topic with under ~10s of good lines is
+    not a video.
+  - *A trailer plus a series*: only when both are genuinely wanted (sign-ups now, follow-up content later).
+  Titles are 2-5 words in the talk's language; they show on the page and become each video's working title.
+- For every video choose phrases adding up to at most `length_seconds - 8` (cards and the title need the rest;
+  leave 5 for 15-20s videos), applying Step 5 already: the opening for this audience, the shape for this goal,
+  complete phrases only. In a series no line appears in two videos.
+Then `PY SK/scripts/flow.py set <project> plan` and wait for `editing`.
+
+## Step 4: `editing`, first time → one folder per video
+`PY SK/scripts/flow.py videos <project>` lists the videos: `<project>/v1`, `v2`, ... Each folder is a complete
+project (their final lines in `marks.json`, `music.json`, `brief.json` with `video_title`). Work through them
+**one at a time, in order**; everything below takes the video's folder as `<video>`.
+`PY SK/scripts/draft.py <video>` → `trailer.json` (one shot per run of highlighted phrases, one caption per
 phrase, every shot `"framed": false`) and `work/framing.jpg`. Its report:
 - **OVER BUDGET**: do not silently drop their lines. In chat, say how many seconds over, list the lines with their
-  lengths, recommend what to drop, and ask (or offer a series of 2-3 videos). Then continue.
-- **NOTHING HIGHLIGHTED**: they left it to you: use your recommendation.
+  lengths, recommend what to drop, and ask. Then continue.
+- **NOTHING HIGHLIGHTED**: they left it to you: use your recommendation for that video.
+A series should look like one family: same card style, same end card wording apart from the topic, the same
+handful of techniques; number the end cards only if the person asked for numbering.
 
 ## Step 5: edit `trailer.json` (the actual editing; take care)
 The highlighted lines are the content. You decide order, trims, framing, cards and wording.
@@ -132,22 +161,25 @@ per shot `zoom`, `push`, `cont`, `picture`, `jcut`, `mute`; per card `kicker`, `
 - `in` = first word - 0.07s, `out` = last word + 0.10s and before the next word starts.
 
 ## Step 6: render, check, show
-1. `PY SK/scripts/trailer.py <project> --check` until no PROBLEM line and TOTAL fits the length they chose.
+1. `PY SK/scripts/trailer.py <video> --check` until no PROBLEM line and TOTAL fits the length they chose.
    Over: drop a line. Never speed up speech.
-2. `PY SK/scripts/trailer.py <project>` (2-3 min; later rounds ~1 min, unchanged shots are cached).
+2. `PY SK/scripts/trailer.py <video>` (2-3 min; later rounds ~1 min, unchanged shots are cached).
 3. Look at `work/qa.jpg`: no heads in the window, cards readable, captions inside the black band.
-4. `PY SK/scripts/verify.py <project>`: compares what is heard in the render with the captions. A missing or extra
+4. `PY SK/scripts/verify.py <video>`: compares what is heard in the render with the captions. A missing or extra
    word at a cut means speech was clipped: move that `in`/`out` by 0.05-0.1s and render again.
-5. `PY SK/scripts/flow.py set <project> review --video <the -phone.mp4>`; the page now plays it.
+5. When every video is rendered and checked:
+   `PY SK/scripts/flow.py set <project> review --video <v1 -phone.mp4> --video <v2 -phone.mp4> ...` (one `--video`
+   per video, in order); the page now plays them.
    Wait: `PY SK/scripts/flow.py wait <project> editing done`.
 
 ## Step 7: notes loop
-`editing` again means they sent notes: read the entries with `"handled": false` in `notes.json`, apply them to
+`editing reason=notes` means they sent notes: read the entries with `"handled": false` in `<project>/notes.json`
+(`video` says which one), apply them to
 `trailer.json`, set them handled, render, verify, `set review --video ...` again, wait again.
 Music notes: `"music": {"file": "...", "volume": 0.7}` in trailer.json overrides the page's choice (1.0 is the
 default level; the track ducks under the voice by itself). `"bed": false` removes the drone used when there is no
 track; `"hit"` per card sets the bass hit.
-`done`: tell them where the files are (full quality and `-phone.mp4` in `<project>/renders`), the lines in order,
+`done`: tell them where the files are (full quality and `-phone.mp4` in each `<project>/vN/renders`), the lines in order,
 what you dropped and why. You cannot hear the mix: say so once and ask them to listen for the music level.
 
 ## Rules that came from real feedback (not up for debate)

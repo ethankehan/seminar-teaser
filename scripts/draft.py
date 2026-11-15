@@ -13,6 +13,7 @@
 """
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -59,7 +60,10 @@ def main():
                       'cx': w // 2, 'cy': int(h * 0.4), 'zoom': 1.0, 'framed': False,
                       'captions': [[m['start'], m['text']] for m in g]})
     total = sum(i['out'] - i['in'] for i in items)
-    cfg = {'name': os.path.basename(project) + '-trailer', 'budget': budget, 'window': {'y': 600, 'h': 640}, 'bed': True,
+    base = os.path.basename(project)
+    if re.fullmatch(r'v\d+', base):                 # a video of a series: <session>-v2
+        base = os.path.basename(os.path.dirname(project)) + '-' + base
+    cfg = {'name': base, 'budget': budget, 'title': brief.get('video_title', ''), 'window': {'y': 600, 'h': 640}, 'bed': True,
            'brief': brief, 'note': marks.get('note', ''), 'items': items + [
                {'type': 'card', 'id': 'title', 'seconds': 2.8, 'kicker': 'Coming soon', 'big': 'TITLE', 'hit': 0.55, 'push': 0.1},
                {'type': 'card', 'id': 'end', 'seconds': 2.2, 'kicker': 'Coming soon', 'big': 'TITLE', 'sub': 'Follow for more',

@@ -42,9 +42,10 @@ In Claude Code, type:
 A page opens in your browser:
 1. Drop in your videos.
 2. Choose the audience (Claude suggests a few), the goal and the length.
-3. Claude highlights the lines it would use. Add or remove lines; the counter shows the seconds.
-4. Pick a track, use your own, or go without music.
-5. Watch the video. Type what should change, or press **Done**.
+3. If there is more good material than one video holds, Claude offers ways to cut it (one video, or a series).
+4. Claude highlights the lines it would use, for each video. Add or remove lines; the counter shows the seconds.
+5. Pick a track, use your own, or go without music.
+6. Watch the result. Type what should change, or press **Done**.
 
 Footage that works best: vertical phone video of one speaker in front of slides, filmed from as close as possible.
 
