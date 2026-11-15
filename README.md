@@ -57,6 +57,10 @@ Footage that works best: vertical phone video of one speaker in front of slides,
 ## Not working?
 Ask Claude to "run the seminar-teaser setup and tell me what is missing". It prints the exact command to fix it.
 
+## License
+The code is released under the MIT License (see `LICENSE`). The bundled fonts and the noise reduction model keep
+their own terms, listed below.
+
 ## Credits
 - Fonts: DM Serif Display, Inter, Montserrat (SIL Open Font License, see `assets/fonts/OFL.txt`).
 - Noise reduction model `assets/sh.rnnn`: from [GregorR/rnnoise-models](https://github.com/GregorR/rnnoise-models).
