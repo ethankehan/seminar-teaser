@@ -63,6 +63,6 @@ their own terms, listed below.
 ## Credits
 - Fonts: DM Serif Display, Inter, Montserrat (SIL Open Font License, see `assets/fonts/OFL.txt`).
 - Noise reduction model `assets/sh.rnnn`: from [GregorR/rnnoise-models](https://github.com/GregorR/rnnoise-models).
-- Music in `assets/music/`: five CC0 (public domain) tracks from OpenGameArt; sources in `assets/music.json`.
+- Music in `assets/music/`: six CC0 (public domain) tracks from OpenGameArt; sources in `assets/music.json`.
 - Sound effects are not stored in this repository. Setup downloads two files from a Pixabay-licensed pack, which
   may be used inside videos but not redistributed as files.

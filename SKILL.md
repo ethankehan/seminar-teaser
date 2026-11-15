@@ -147,7 +147,7 @@ what you dropped and why. You cannot hear the mix: say so once and ask them to l
 `scripts/setup.py` environment · `app.py` the web page and its server · `flow.py` wait / set / transcript ·
 `ingest.py` transcription · `draft.py` marks → first edit · `trailer.py` render · `verify.py` post-render check ·
 `teaser.py` shared helpers and an older plain style · `words.py` phrase chunking.
-`assets/music/` five CC0 tracks listed in `assets/music.json`. `assets/trailer.example.json` shows the edit format.
+`assets/music/` six CC0 tracks (five calm, one intense "Trailer") listed in `assets/music.json`. `assets/trailer.example.json` shows the edit format.
 
 ## Gotchas
 - This ffmpeg may lack drawtext/subtitles: all text is drawn with Pillow.
