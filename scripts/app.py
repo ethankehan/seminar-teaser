@@ -88,7 +88,7 @@ BRAND_DIR = os.environ.get('SEMINAR_BRAND_DIR') or os.path.join(os.path.expandus
 
 
 def brand_kit():
-    """The brand lives on this computer, outside the skill folder: name, handle, colour, logo, voice notes."""
+    """The brand lives on this computer, outside the skill folder: name, handle, colour, logo, vocabulary."""
     return read_json(os.path.join(BRAND_DIR, 'brand.json'))
 
 

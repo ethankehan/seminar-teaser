@@ -179,10 +179,9 @@ per shot `zoom`, `push`, `cont`, `picture`, `jcut`, `mute`; per card `kicker`, `
 - `in` = first word - 0.07s, `out` = last word + 0.10s and before the next word starts.
 
 **Brand.** `brief.json` has `brand` (what to apply: `logo`, `handle`, `color`; empty = none) and `brand_kit`
-(name, handle, colour, logo path, `voice`). `draft.py` puts it into `trailer.json` and the renderer does the rest:
-the accent colour replaces gold, the logo and the account name go on the last card. When a brand is on, **read
-`brand_kit.voice` and write to it**: it decides which lines are acceptable, how cards are worded and what the call
-to action says. A brand that asks for reassurance gets no alarmist cards, however well they would perform.
+(name, handle, colour, logo path). `draft.py` puts it into `trailer.json` and the renderer does the rest: the
+accent colour replaces gold, the logo and the account name go on the last card. The brand is visual only: it does
+not change which lines you choose or how you word them. Tone requirements come from the person, in their words.
 The kit lives in `<home>/seminar-videos/brand/` on each computer and is edited on the page. Never copy brand
 files, names or colours into the skill folder: the skill is public, the brand is not.
 

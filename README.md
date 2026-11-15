@@ -52,9 +52,8 @@ Footage that works best: vertical phone video of one speaker in front of slides,
 ## Your brand
 On the second page you can switch on a brand: logo and account name on the last card, your colour as the accent.
 Set it up once (name, account, colour, a logo PNG for dark backgrounds); it is kept in a `seminar-videos/brand`
-folder in your home folder on that computer and is never uploaded anywhere. Two optional lines in its
-`brand.json` help: `voice` (how the brand speaks, which Claude then follows) and `terms` (names and words of your
-field, so they are transcribed correctly).
+folder in your home folder on that computer and is never uploaded anywhere. One optional line in its
+`brand.json` helps: `terms` (names and words of your field, so they are transcribed correctly).
 
 ## Updating
 Tell Claude "update the seminar-teaser skill". It pulls the latest version from this page.

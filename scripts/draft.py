@@ -71,7 +71,7 @@ def main():
     kit = brief.get('brand_kit') or {}
     if brief.get('brand') and kit:                   # chosen on the page; the kit lives outside the skill folder
         cfg['brand'] = {'use': brief['brand'], 'name': kit.get('name', ''), 'handle': kit.get('handle', ''),
-                        'color': kit.get('color', ''), 'logo': kit.get('logo', ''), 'voice': kit.get('voice', '')}
+                        'color': kit.get('color', ''), 'logo': kit.get('logo', '')}
     if brief.get('speaker_name'):                    # typed on the page; empty means no name tag
         cfg['speaker'] = {'name': brief['speaker_name'], 'title': brief.get('speaker_title', '')}
     out = os.path.join(project, 'trailer.json')
