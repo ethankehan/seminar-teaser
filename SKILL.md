@@ -42,7 +42,7 @@ The page moves through stages; `state.json` holds the current one. You never pol
 | upload | person | drops videos |
 | transcribing | app | transcribes (about 1 min per minute of footage) |
 | **suggesting** | **you** | read the talk, write audience suggestions |
-| brief | person | audience, goal, length |
+| brief | person | audience, goal, length, optional speaker name and title |
 | **recommending** | **you** | choose the lines for that brief |
 | highlight | person | adjusts your selection |
 | music | person | picks a track, their own file, or none |
@@ -66,7 +66,8 @@ concrete groups this talk would actually matter to, each under ~45 characters, m
 of the talk. Then `PY SK/scripts/flow.py set <project> brief` and wait for `recommending`.
 
 ## Step 3: `recommending` → your version of the highlights
-Read `<project>/brief.json` (`audience`, `goal`, `length_seconds`). Choose phrases whose lengths add up to at most
+Read `<project>/brief.json` (`audience`, `goal`, `length_seconds`; `speaker_name` / `speaker_title` are optional:
+empty means no name tag, and `draft.py` adds the tag by itself when they are filled). Choose phrases whose lengths add up to at most
 `length_seconds - 8` (cards and the title need the rest; for 15-20s videos leave 5). Apply the editing rules in
 Step 5 already here: the right opening for this audience, the shape for this goal, complete phrases only.
 Write `<project>/recommend.json`: `{"keys": ["c1:1", "c1:13", ...]}`, then
@@ -112,18 +113,15 @@ with `"hit": 0.55`; then one short stinger shot; then the end card with `sub` = 
 1080p). Two shots in a row from the same clip: give the second a different zoom (1.15-1.3). Then delete
 `"framed": false`.
 
-**Techniques the renderer gives you** (use them on purpose, not everywhere):
-- *Spoken-word highlight*: the word being said turns gold in the caption. On by default (`"karaoke": false` off).
-- *Card slam + number roll*: every card lands with a scale overshoot and a one-frame flash; a `big` that starts
-  with a number of 10 or more rolls up from 0 ("$110,000", "99 YEARS"). `"count": false` / `"flash": false` per card.
-- *Punch-in on the key word*: split a shot where the important number or claim starts and give the second half
-  `"cont": true` plus a higher `zoom` (+0.25 to +0.35) and, if needed, a different `cx`/`cy`. Picture jumps closer,
-  voice continues without a gap (the join is snapped to a frame). Two or three per video at most; the same trick
-  cuts to a close-up of the slide while he keeps talking.
-- *Progress line*: a thin gold line under the window fills as the video plays. `"progress": false` to remove.
-- *Name tag*: `"speaker": {"name": "...", "title": "..."}` at the top level shows a lower third on the first shot
-  for 3.5s. Only with a name and title the person gave you.
-- *Music*: ducks under the voice and swells on the cards by itself.
+**Techniques: choose, do not stack.** `SK/references/techniques.md` is the library: structure, openings, cuts,
+captions, cards, sound, endings, each with when to use it, when to skip it and how to do it here, plus tables by
+goal and by footage. Read it before the first edit of a session. Then pick the few that fit *this* video: its
+goal, its length, what is really in the frame. Most videos need three to five; using everything makes every video
+look the same and none of them good. If a technique does not clearly help, leave it out. When you find a
+technique worth keeping (from the person's notes or elsewhere), add it to that file in the same format.
+Quick map of what `trailer.json` supports: top level `hook`, `speaker`, `karaoke`, `progress`, `music`, `bed`;
+per shot `zoom`, `push`, `cont`, `picture`, `jcut`, `mute`; per card `kicker`, `big`, `sub`, `hit`, `count`,
+`flash`, `drop`, `fade_out`.
 
 **Captions** are `[source_time, "text"]`, one per phrase, time = start of its first word:
 - A caption ends where the speaker's phrase ends. Never let the last word of a phrase fall into the next caption
@@ -167,7 +165,7 @@ what you dropped and why. You cannot hear the mix: say so once and ask them to l
 `scripts/setup.py` environment · `app.py` the web page and its server · `flow.py` wait / set / transcript ·
 `ingest.py` transcription · `draft.py` marks → first edit · `trailer.py` render · `verify.py` post-render check ·
 `teaser.py` shared helpers and an older plain style · `words.py` phrase chunking.
-`assets/music/` six CC0 tracks (five calm, one intense "Trailer") listed in `assets/music.json`. `assets/trailer.example.json` shows the edit format.
+`references/techniques.md` the technique library. `assets/music/` six CC0 tracks (five calm, one intense "Trailer") listed in `assets/music.json`. `assets/trailer.example.json` shows the edit format.
 
 ## Gotchas
 - This ffmpeg may lack drawtext/subtitles: all text is drawn with Pillow.

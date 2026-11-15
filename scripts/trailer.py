@@ -38,7 +38,7 @@ HOT = (255, 212, 96, 255)          # the word being spoken
 TAG_SECONDS = 3.5                  # how long the speaker's name stays on the first shot
 
 
-def caption_png(path, win, text, active=None, tag=None):
+def caption_png(path, win, text, active=None, tag=None, hook=None):
     im = Image.new('RGBA', (CW, CH), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
     if text:
@@ -52,13 +52,20 @@ def caption_png(path, win, text, active=None, tag=None):
                 x += d.textlength(tok + ' ', font=f)
                 idx += 1
             y += 56
+    if hook:                                        # the opening claim, big, in the band above the window
+        fh = T.font('DMSerifDisplay-400-normal', 68)
+        lines = T.wrap(d, hook, fh, 960)[:3]
+        y = win['y'] - 128 - 76 * len(lines)
+        for ln in lines:
+            d.text((540, y), ln, font=fh, fill=T.CREAM, anchor='ma')
+            y += 76
     if tag and tag.get('name'):                     # lower third in the black band above the window
-        fn, ft = T.font('Montserrat-600-normal', 30), T.font('Montserrat-600-normal', 21)
-        y = win['y'] - (74 if tag.get('title') else 48)
+        fn, ft = T.font('Montserrat-600-normal', 31), T.font('Montserrat-600-normal', 24)
+        y = win['y'] - (80 if tag.get('title') else 50)
         d.line([(44, y + 4), (44, win['y'] - 22)], fill=T.GOLD, width=3)
         d.text((62, y), ' '.join(tag['name'].upper()), font=fn, fill=T.CREAM, anchor='la')
         if tag.get('title'):
-            d.text((62, y + 40), ' '.join(tag['title'].upper()), font=ft, fill=T.GOLD, anchor='la')
+            d.text((62, y + 42), ' '.join(tag['title'].upper()), font=ft, fill=T.GOLD, anchor='la')
     im.save(path)
 
 
@@ -104,7 +111,7 @@ def count_texts(big, frames):
     return out
 
 
-def render_card(P, it, o):
+def render_card(P, it, o, srcs=None):
     """Every frame is composed with Pillow: the text slams in (scale overshoot + a white flash), a number rolls up to
     its value, then a slow push. ffmpeg only encodes the frames."""
     d = it['seconds']
@@ -129,13 +136,24 @@ def render_card(P, it, o):
         if fo and i > N - fo * 30:
             fr = Image.blend(fr, black, min(1, (i - (N - fo * 30)) / (fo * 30)))
         fr.save(os.path.join(fdir, f'{i:04d}.jpg'), quality=93)
+    voice = it.get('_voice')                        # J-cut: the next line starts under this card
+    if voice:
+        wav = o[:-4] + '.wav'
+        T.run(['ffmpeg', '-v', 'error', '-y', '-ss', f"{voice['in']:.4f}", '-t', f"{voice['dur']:.4f}", '-i', srcs[voice['clip']],
+               '-vn', '-af', f"{T.DENOISE},afade=t=in:d=0.04,adelay={int((N / 30 - voice['dur']) * 1000)}:all=1,"
+               f"apad=whole_dur={N / 30:.4f}", '-ar', '48000', '-ac', '2', '-c:a', 'pcm_s16le', wav], cwd=T.ASSETS)
+        audio = ['-i', wav]
+    else:
+        audio = ['-f', 'lavfi', '-t', f'{N / 30:.4f}', '-i', 'anullsrc=r=48000:cl=stereo']
     T.run(['ffmpeg', '-v', 'error', '-y', '-framerate', '30', '-i', os.path.join(fdir, '%04d.jpg'),
-           '-f', 'lavfi', '-t', f'{N / 30:.4f}', '-i', 'anullsrc=r=48000:cl=stereo', '-map', '0:v', '-map', '1:a',
+           *audio, '-map', '0:v', '-map', '1:a', '-t', f'{N / 30:.4f}',
            '-frames:v', str(N), '-vf', 'setsar=1,format=yuv420p', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '17',
            '-r', '30', '-c:a', 'aac', '-b:a', '192k', '-threads', T.THREADS, o])
     for f in os.listdir(fdir):
         os.remove(os.path.join(fdir, f))
     os.rmdir(fdir)
+    if voice:
+        os.remove(o[:-4] + '.wav')
 
 
 def caption_states(it, N, words, opts):
@@ -169,7 +187,9 @@ def render_shot(P, it, src, win, o, opts):
     N = max(1, round(d * 30))
     wav = o[:-4] + '.wav'
     fades = ([] if opts.get('no_in') else ['afade=t=in:d=0.04']) + ([] if opts.get('no_out') else [f'afade=t=out:st={d - 0.06:.3f}:d=0.06'])
-    af = ','.join([T.DENOISE, *fades, f'apad=whole_dur={N / 30:.4f}'])
+    af = ','.join([T.DENOISE, *fades, *(['volume=0'] if it.get('mute') else []), f'apad=whole_dur={N / 30:.4f}'])
+    pic = it.get('picture')                         # cutaway: these frames, that voice
+    vsrc, va = (opts['srcs'][pic['clip']], pic['in']) if pic else (src, a)
     T.run(['ffmpeg', '-v', 'error', '-y', '-ss', f'{a:.4f}', '-t', f'{d:.4f}', '-i', src, '-vn', '-af', af,
            '-ar', '48000', '-ac', '2', '-c:a', 'pcm_s16le', wav], cwd=T.ASSETS)
     # caption track for this shot
@@ -182,13 +202,13 @@ def render_shot(P, it, src, win, o, opts):
             if nxt[0] - t0 < 0.005:
                 continue
             tag = opts.get('tag') if tagged else None
-            last = os.path.join(sd, 'cap-' + h8([text, act, tag, win]) + '.png')
+            last = os.path.join(sd, 'cap-' + h8([text, act, tag, opts.get('hook'), win]) + '.png')
             if not os.path.exists(last):
-                caption_png(last, win, text, act, tag)
+                caption_png(last, win, text, act, tag, opts.get('hook'))
             f.write(f"file '{T.fp(last)}'\nduration {nxt[0] - t0:.4f}\n")
         f.write(f"file '{T.fp(last)}'\n")
     z = it.get('zoom', 1.0)
-    w, hh = T.probe_size(src)
+    w, hh = T.probe_size(vsrc)
     cw, ch = round(CW / z / 2) * 2, round(win['h'] / z / 2) * 2
     x = max(0, min(w - cw, round(it['cx'] - cw / 2)))
     y = max(0, min(hh - ch, round(it['cy'] - ch / 2)))
@@ -198,7 +218,7 @@ def render_shot(P, it, src, win, o, opts):
           f"zoompan=z='1+{push}*on/{N}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={CW}x{win['h']}:fps=30,"
           f"{GRADE},pad={CW}:{CH}:0:{win['y']}:black[p];[2:v]fps=30,format=rgba[t];"
           f"[p][t]overlay=0:0:eof_action=pass,{','.join(vf + ['setsar=1', 'format=yuv420p'])}[v]")
-    T.run(['ffmpeg', '-v', 'error', '-y', '-ss', f'{a:.4f}', '-t', f'{d:.4f}', '-i', src, '-i', wav,
+    T.run(['ffmpeg', '-v', 'error', '-y', '-ss', f'{va:.4f}', '-t', f'{d:.4f}', '-i', vsrc, '-i', wav,
            '-f', 'concat', '-safe', '0', '-i', tf, '-filter_complex', fc, '-map', '[v]', '-map', '1:a',
            '-frames:v', str(N), '-t', f'{N / 30:.4f}', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '17', '-r', '30',
            '-c:a', 'aac', '-b:a', '192k', '-threads', T.THREADS, o])
@@ -220,7 +240,17 @@ def main():
                 sys.exit(f"{it['id']}: \"cont\" needs the shot before it to be from the same clip")
             prev['out'] = round(prev['in'] + round((prev['out'] - prev['in']) * 30) / 30, 4)
             it['in'] = prev['out']
+    for i, it in enumerate(items[1:], 1):          # "jcut": seconds of this line's voice that play over the card before it
+        prev = items[i - 1]
+        if it['type'] == 'shot' and it.get('jcut') and prev['type'] == 'card':
+            x = round(min(it['jcut'], prev['seconds'] - 0.4, it['out'] - it['in'] - 0.6) * 30) / 30
+            if x > 0.1:
+                prev['_voice'] = {'clip': it['clip'], 'in': it['in'], 'dur': x}
+                it['_lead'] = x
     problems = T.lint({'segments': shots})
+    for it in shots:
+        if it.get('_lead'):                         # after the lint, which checks caption times against the full line
+            it['in'] = round(it['in'] + it['_lead'], 4)
     for it in shots:
         if it.get('framed') is False:
             problems.append(f"{it['id']}: not framed yet. Look at work/framing.jpg, set cx/cy/zoom, then delete \"framed\": false")
@@ -253,15 +283,16 @@ def main():
         if it['type'] == 'card':
             o = os.path.join(P, 'work', 'tr', f"{it.get('id', 'card')}-{h8([it, 'c2'])}.mp4")
             if not os.path.exists(o):
-                render_card(P, it, o)
+                render_card(P, it, o, src)
         else:
             nxt = items[i + 1] if i + 1 < len(items) else {}
-            opts = {'karaoke': cfg.get('karaoke', True), 'no_in': bool(it.get('cont')),
+            opts = {'karaoke': cfg.get('karaoke', True), 'no_in': bool(it.get('cont') or it.get('_lead')),
+                    'hook': cfg.get('hook') if it is first_shot else None,
                     'no_out': nxt.get('type') == 'shot' and bool(nxt.get('cont')),
                     'tag': cfg.get('speaker') if it is first_shot and (cfg.get('speaker') or {}).get('name') else None}
             o = os.path.join(P, 'work', 'tr', f"{it.get('id', 'shot')}-{h8([it, win, opts, 's2'])}.mp4")
             if not os.path.exists(o):
-                render_shot(P, it, src[it['clip']], win, o, {**opts, 'words': words.get(it['clip'], [])})
+                render_shot(P, it, src[it['clip']], win, o, {**opts, 'words': words.get(it['clip'], []), 'srcs': src})
         files.append(o)
     lens = [T.vlen(f) for f in files]
     starts = [sum(lens[:i]) for i in range(len(lens))]
@@ -301,8 +332,10 @@ def main():
         inputs += ['-stream_loop', '-1', '-i', music['file']]
         fc[fc.index(f'[ac]loudnorm=I=-15:TP=-1.5:LRA=9,{AFMT}[voice]')] = (
             f'[ac]loudnorm=I=-15:TP=-1.5:LRA=9,{AFMT},asplit=2[voice][key]')
+        drops = ''.join(f",volume=0:enable='between(t,{starts[i] - it['drop']:.3f},{starts[i]:.3f})'"
+                        for i, it in enumerate(items) if it['type'] == 'card' and it.get('drop'))   # silence, then the hit
         fc.append(f'[{k}:a]atrim=0:{total:.3f},loudnorm=I=-21:TP=-2,{AFMT},volume={music.get("volume", 1.0)},'
-                  f'afade=t=in:d=0.6,afade=t=out:st={max(0, total - 1.8):.3f}:d=1.8[mraw]')
+                  f'afade=t=in:d=0.6,afade=t=out:st={max(0, total - 1.8):.3f}:d=1.8{drops}[mraw]')
         fc.append('[mraw][key]sidechaincompress=threshold=0.02:ratio=8:attack=15:release=450[mus]')
         mix.append('[mus]')
         k += 1

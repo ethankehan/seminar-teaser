@@ -64,6 +64,8 @@ def main():
                {'type': 'card', 'id': 'title', 'seconds': 2.8, 'kicker': 'Coming soon', 'big': 'TITLE', 'hit': 0.55, 'push': 0.1},
                {'type': 'card', 'id': 'end', 'seconds': 2.2, 'kicker': 'Coming soon', 'big': 'TITLE', 'sub': 'Follow for more',
                 'hit': 0.3, 'push': 0.04, 'fade_out': 0.6}]}
+    if brief.get('speaker_name'):                    # typed on the page; empty means no name tag
+        cfg['speaker'] = {'name': brief['speaker_name'], 'title': brief.get('speaker_title', '')}
     out = os.path.join(project, 'trailer.json')
     if os.path.exists(out) and '--force' not in sys.argv:
         out = os.path.join(project, 'trailer.draft.json')

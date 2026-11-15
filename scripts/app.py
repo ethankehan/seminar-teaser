@@ -165,7 +165,9 @@ const V={
   for(const g of ['Follows','Likes and shares','Comments','Sign-ups']){const c=el('button','chip',g);c.onclick=()=>pick(goals,g,v=>goal=v);goals.append(c)}
   app.append(el('div','lab','Length'));const L=el('div','len'),o=el('output','',len+'s'),r=el('input');r.type='range';r.min=15;r.max=60;r.step=5;r.value=len;
   r.oninput=()=>{len=+r.value;o.textContent=len+'s'};L.append(o,r);app.append(L);
-  const b=go('Continue',async()=>{b.disabled=true;await post('/brief',{audience:aud,goal,length_seconds:len})});
+  app.append(el('div','lab','Speaker'));const nm=el('input'),ti=el('input');nm.type=ti.type='text';nm.placeholder='Name';ti.placeholder='Title';
+  nm.value=D.brief.speaker_name||'';ti.value=D.brief.speaker_title||'';nm.style.marginTop='0';app.append(nm,ti);
+  const b=go('Continue',async()=>{b.disabled=true;await post('/brief',{audience:aud,goal,length_seconds:len,speaker_name:nm.value.trim(),speaker_title:ti.value.trim()})});
   if(aud)pick(chips,aud,v=>aud=v);if(goal)pick(goals,goal,v=>goal=v);ok()},
 
  async highlight(){const D=await (await fetch('/data')).json();const on=new Set(D.selected),els=[];let last=null;
@@ -351,10 +353,16 @@ def main():
                 brief = read_json(os.path.join(project, 'brief.json'), {})
                 old = dict(brief)
                 brief.update({'audience': str(req.get('audience', '')).strip(), 'goal': str(req.get('goal', '')),
-                              'length_seconds': max(15, min(60, int(req.get('length_seconds', 45))))})
+                              'length_seconds': max(15, min(60, int(req.get('length_seconds', 45)))),
+                              'speaker_name': str(req.get('speaker_name', '')).strip()[:60],
+                              'speaker_title': str(req.get('speaker_title', '')).strip()[:80]})
                 write_json(os.path.join(project, 'brief.json'), brief)
-                if brief == old and os.path.exists(os.path.join(project, 'recommend.json')):
-                    set_state(project, 'highlight')              # came back and changed nothing: keep their lines
+                core = lambda x: [x.get(k) for k in ('audience', 'goal', 'length_seconds')]
+                if core(brief) == core(old) and os.path.exists(os.path.join(project, 'recommend.json')):
+                    if brief != old:                             # only the name tag changed: rebuild, same lines
+                        set_state(project, 'highlight', dirty=True)
+                    else:
+                        set_state(project, 'highlight')          # came back and changed nothing: keep their lines
                 else:
                     for stale in ('marks.json', 'recommend.json'):   # a new brief means a new recommendation
                         if os.path.exists(os.path.join(project, stale)):
