@@ -2,9 +2,9 @@
 
 A Claude Code skill that turns seminar or talk footage into a short, trailer-style social video.
 
-You answer three questions (who the video is for, what it should achieve, how long), highlight the lines you want
-on a page that opens in your browser, and Claude cuts, crops out the audience, cleans the audio, adds subtitles and
-number cards, and hands you the video. Then you give notes and it re-renders in about a minute.
+One page opens in your browser and walks you through it: add the videos, choose who it is for, what it should
+achieve and how long, adjust the lines Claude recommends, pick the music, then watch the result and type what to
+change. Claude cuts, crops out the audience, cleans the audio and adds subtitles and number cards in between.
 
 Everything runs on your own computer. No footage is uploaded and nothing is paid for per use.
 
@@ -39,19 +39,18 @@ In Claude Code, type:
 ```
 /seminar-teaser
 ```
-and say where the clips are, for example "the clips are in Downloads/seminar-nov". Then:
-1. Claude asks who the video is for, what you want from it (follows, likes and shares, comments, sign-ups) and how long.
-2. A page opens in your browser with the transcript. Click the lines you want, watch the seconds counter, press **Done**.
-3. Claude builds the video and gives you the file. Tell it what to change.
+A page opens in your browser:
+1. Drop in your videos.
+2. Choose the audience (Claude suggests a few), the goal and the length.
+3. Claude highlights the lines it would use. Add or remove lines; the counter shows the seconds.
+4. Pick a track, use your own, or go without music.
+5. Watch the video. Type what should change, or press **Done**.
 
 Footage that works best: vertical phone video of one speaker in front of slides, filmed from as close as possible.
 
 ## Good to know
-- 60 seconds is the upper limit. If you highlight more than fits, Claude asks which lines to drop or offers a series.
-- Claude cannot hear. Listen to the result once and tell it if the hits or the background drone should be louder,
-  softer or gone.
-- The background drone is a placeholder. Adding a track in Instagram or CapCut when you post gives a much stronger
-  trailer feel.
+- 60 seconds is the upper limit.
+- Claude cannot hear. Listen once and say if the music or the hits should be louder, softer or gone.
 - Transcripts of live rooms contain mistakes. Claude fixes obvious ones and cuts around words it cannot make out.
 
 ## Not working?
@@ -64,5 +63,6 @@ their own terms, listed below.
 ## Credits
 - Fonts: DM Serif Display, Inter, Montserrat (SIL Open Font License, see `assets/fonts/OFL.txt`).
 - Noise reduction model `assets/sh.rnnn`: from [GregorR/rnnoise-models](https://github.com/GregorR/rnnoise-models).
+- Music in `assets/music/`: five CC0 (public domain) tracks from OpenGameArt; sources in `assets/music.json`.
 - Sound effects are not stored in this repository. Setup downloads two files from a Pixabay-licensed pack, which
   may be used inside videos but not redistributed as files.

@@ -193,7 +193,23 @@ def main():
             fc.append(f'[w{j}]adelay={max(0, int((st - 0.22) * 1000))}:all=1,volume={cfg.get("whoosh", 0.08)},{AFMT}[wo{j}]')
             mix += [f'[hi{j}]', f'[wo{j}]']
         k += 2
-    if cfg.get('bed', True):                  # quiet low drone under everything
+    music = cfg.get('music')
+    if music is None:                         # chosen on the web page
+        mj = os.path.join(P, 'music.json')
+        if os.path.exists(mj):
+            with open(mj, encoding='utf-8') as f:
+                music = json.load(f)
+    has_music = bool(music and music.get('file') and os.path.exists(music['file']))
+    if has_music:                             # the track swells on the cards and ducks under the voice
+        inputs += ['-stream_loop', '-1', '-i', music['file']]
+        fc[fc.index(f'[ac]loudnorm=I=-15:TP=-1.5:LRA=9,{AFMT}[voice]')] = (
+            f'[ac]loudnorm=I=-15:TP=-1.5:LRA=9,{AFMT},asplit=2[voice][key]')
+        fc.append(f'[{k}:a]atrim=0:{total:.3f},loudnorm=I=-21:TP=-2,{AFMT},volume={music.get("volume", 1.0)},'
+                  f'afade=t=in:d=0.6,afade=t=out:st={max(0, total - 1.8):.3f}:d=1.8[mraw]')
+        fc.append('[mraw][key]sidechaincompress=threshold=0.02:ratio=8:attack=15:release=450[mus]')
+        mix.append('[mus]')
+        k += 1
+    if not has_music and cfg.get('bed', True) and not (music and music.get('type') == 'none'):   # quiet low drone
         inputs += ['-f', 'lavfi', '-t', f'{total:.3f}', '-i',
                    'sine=f=55:r=48000[a];sine=f=110:r=48000[b];sine=f=164.81:r=48000[c];sine=f=82.4:r=48000[e];'
                    '[a][b][c][e]amix=inputs=4:normalize=0,tremolo=f=0.13:d=0.55,lowpass=f=420[out0]']

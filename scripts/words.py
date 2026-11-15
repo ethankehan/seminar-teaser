@@ -16,8 +16,19 @@ def load(project):
         p = os.path.join(project, f'words_{cid}.json')
         if os.path.exists(p):
             with open(p, encoding='utf-8') as f:
-                words[cid] = json.load(f)
+                words[cid] = tidy(json.load(f))
     return src, words
+
+
+def tidy(ws):
+    """Whisper splits "$130 ,000" and "3 %" into two tokens: glue the stray piece back onto the word before it."""
+    out = []
+    for w in ws:
+        if out and re.match(r'^[,.%][\w%]*[.,?!]?$', w['text']) and w['start'] - out[-1]['end'] < 0.6:
+            out[-1] = {'text': out[-1]['text'] + w['text'], 'start': out[-1]['start'], 'end': w['end']}
+        else:
+            out.append(dict(w))
+    return out
 
 
 def chunks(ws):
@@ -28,8 +39,10 @@ def chunks(ws):
         nxt = ws[i + 1] if i + 1 < len(ws) else None
         gap = (nxt['start'] - w['end']) if nxt else 9
         n = len(cur)
-        end = (nxt is None or re.search(r'[.?!]["\')]?$', w['text']) or (w['text'].endswith(',') and n >= 4)
-               or (gap > 0.6 and n >= 2) or n >= 14)
+        stop = r'[.?!]["\')]?$'
+        near_end = any(re.search(stop, x['text']) for x in ws[i + 1:i + 3])      # do not strand "is." on its own
+        end = (nxt is None or re.search(stop, w['text']) or (w['text'].endswith(',') and n >= 4)
+               or (gap > 0.6 and n >= 2) or (n >= 14 and not near_end) or n >= 17)
         if end:
             a, b = cur[0], cur[-1]
             prev_end = ws[a - 1]['end'] if a else -9
