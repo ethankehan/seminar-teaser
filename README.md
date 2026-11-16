@@ -45,7 +45,10 @@ A page opens in your browser:
 3. If there is more good material than one video holds, Claude offers ways to cut it (one video, or a series).
 4. Claude highlights the lines it would use, for each video. Add or remove lines; the counter shows the seconds.
 5. Pick a track, use your own, or go without music.
-6. Watch the result. Type what should change, or press **Done**.
+6. Watch the result. Type what should change, or press **Save**.
+7. Choose the folder, which videos to keep, and full quality or a small copy for messaging.
+
+Waiting pages show roughly how long is left.
 
 Footage that works best: vertical phone video of one speaker in front of slides, filmed from as close as possible.
 

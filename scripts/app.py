@@ -69,9 +69,14 @@ def get_state(project):
     return read_json(os.path.join(project, 'state.json'), {'stage': 'upload', 'msg': '', 'rev': 0})
 
 
+WAIT_GUESS = {'suggesting': 60, 'planning': 80}      # seconds the editor usually needs; shown as "about a minute"
+
+
 def set_state(project, stage, msg='', **extra):
     with LOCK:
         s = get_state(project)
+        if 'eta' not in extra and s.get('stage') != stage:        # a new stage: a fresh estimate, or none
+            extra['eta'] = time.time() + WAIT_GUESS[stage] if stage in WAIT_GUESS else None
         s.update(extra)
         s.update({'stage': stage, 'msg': msg, 'rev': s.get('rev', 0) + 1})
         write_json(os.path.join(project, 'state.json'), s)
@@ -100,6 +105,44 @@ def expand(inputs):
         elif os.path.exists(p):
             files.append(p)
     return files
+
+
+def duration(path):
+    r = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', path],
+                       capture_output=True, encoding='utf-8', errors='replace').stdout.strip()
+    try:
+        return float(r)
+    except ValueError:
+        return 0.0
+
+
+def settings(update=None):
+    p = os.path.join(os.path.dirname(BRAND_DIR), 'settings.json')
+    cur = read_json(p, {})
+    if update:
+        cur.update(update)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        write_json(p, cur)
+    return cur
+
+
+def pick_folder(start):
+    """The system's own folder dialog; '' when cancelled or not available (the page then keeps its text field)."""
+    try:
+        if sys.platform == 'darwin':
+            script = f'POSIX path of (choose folder with prompt "Save the videos to" default location POSIX file "{start}")'
+            r = subprocess.run(['osascript', '-e', script], capture_output=True, encoding='utf-8', errors='replace', timeout=600)
+        elif os.name == 'nt':
+            ps = ('Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; '
+                  f"$f.SelectedPath = '{start}'; if ($f.ShowDialog() -eq 'OK') {{ $f.SelectedPath }}")
+            r = subprocess.run(['powershell', '-NoProfile', '-STA', '-Command', ps], capture_output=True, encoding='utf-8',
+                               errors='replace', timeout=600)
+        else:
+            r = subprocess.run(['zenity', '--file-selection', '--directory', f'--filename={start}/'], capture_output=True,
+                               encoding='utf-8', errors='replace', timeout=600)
+        return r.stdout.strip().rstrip('/\\') if r.returncode == 0 else ''
+    except Exception:
+        return ''
 
 
 def resolution(path):
@@ -168,7 +211,10 @@ def prep_video(project, i, title):
 
 def transcribe(project, inputs):
     lang = get_state(project).get('language', 'en')
-    set_state(project, 'transcribing', 'Listening to the talk', inputs=inputs)
+    durs = [duration(f) for f in sorted(expand(inputs), key=lambda f: os.path.basename(f).lower())]   # ingest's clip order
+    rate = 0.4 if lang == 'en' else 0.9                # seconds of work per second of talk, until measured
+    t0 = time.time()
+    set_state(project, 'transcribing', 'Listening to the talk', inputs=inputs, eta=t0 + 25 + sum(durs) * rate)
     terms = (brand_kit() or {}).get('terms', '')
     p = subprocess.Popen([sys.executable, os.path.join(HERE, 'ingest.py'), project, *inputs, '--language', lang,
                           *(['--terms', terms] if terms else [])], stdout=subprocess.PIPE,
@@ -179,7 +225,11 @@ def transcribe(project, inputs):
         m = re.match(r'c(\d+) transcribing', line)
         if m:
             total = len(read_json(os.path.join(project, 'sources.json'), {})) or '?'
-            set_state(project, 'transcribing', f'Listening to clip {m.group(1)} of {total}')
+            k = int(m.group(1)) - 1                          # clips before this one are done: measure the real speed
+            done, left = sum(durs[:k]), sum(durs[k:])
+            if done > 20:
+                rate = (time.time() - t0) / done
+            set_state(project, 'transcribing', f'Listening to clip {m.group(1)} of {total}', eta=time.time() + left * rate)
     if p.wait() == 0:
         set_state(project, 'suggesting', 'Reading the talk')
     else:
@@ -225,6 +275,7 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border:0;border-radiu
 .row .t{flex:1}.row .play{width:38px;height:38px;border-radius:50%;box-shadow:inset 0 0 0 1px var(--line);font-size:12px;flex:none}
 .row .t div{display:flex;justify-content:space-between;gap:16px;color:var(--mute);font-size:15px;margin-top:6px}.row .t div span:last-child{font-variant-numeric:tabular-nums}
 .wait{min-height:52vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;color:var(--mute);text-align:center}
+.wait .m{color:var(--ink)}.wait .e{font-size:14px;margin-top:-16px;min-height:22px;font-variant-numeric:tabular-nums}
 .wait:before{content:"";width:150px;height:2px;border-radius:2px;background:linear-gradient(90deg,var(--line) 0 40%,var(--ink) 40% 60%,var(--line) 60%);background-size:250% 100%;animation:sl 1.5s linear infinite}
 @keyframes sl{from{background-position:100% 0}to{background-position:-50% 0}}
 video{display:block;width:100%;max-width:300px;margin:0 auto 26px;border-radius:16px;background:#000;aspect-ratio:9/16}
@@ -233,8 +284,9 @@ video{display:block;width:100%;max-width:300px;margin:0 auto 26px;border-radius:
 </style></head><body><div class="wrap"><button class="back" id="back" hidden>Back</button><div class="dots" id="dots"></div><div id="app"></div></div>
 <script>
 const app=document.getElementById('app'),dots=document.getElementById('dots');let cur=null,rev=-1,idx=-1;
-const STEP={upload:0,lowres:0,transcribing:0,suggesting:0,brief:1,planning:1,plan:2,highlight:2,music:3,editing:4,review:4,done:4,error:0};
-const WAIT={transcribing:1,suggesting:1,planning:1,editing:1};const BACK={lowres:1,plan:1,highlight:1,music:1,review:1};
+const left=n=>n==null?'':n>90?'About '+Math.round(n/60)+' min left':n>45?'About a minute left':n>0?'Less than a minute left':'Almost there';
+const STEP={save:4,upload:0,lowres:0,transcribing:0,suggesting:0,brief:1,planning:1,plan:2,highlight:2,music:3,editing:4,review:4,done:4,error:0};
+const WAIT={transcribing:1,suggesting:1,planning:1,editing:1};const BACK={save:1,lowres:1,plan:1,highlight:1,music:1,review:1};
 const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
 const post=(u,b)=>fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});
 const data=async()=>(await fetch('/data',{cache:'no-store'})).json();
@@ -346,15 +398,30 @@ const V={
   const t2=el('textarea');t2.rows=2;t2.placeholder=D.titles.length>1?'What should change in “'+D.titles[0]+'”?':'What should change?';app.append(t2);
   const send=go('Send changes',async()=>{send.disabled=true;await post('/notes',{text:t2.value.trim(),index:i})},true);send.disabled=true;
   t2.oninput=()=>{send.disabled=!t2.value.trim();t2.style.height='auto';t2.style.height=t2.scrollHeight+'px'};
-  go('Done',async b=>{b.disabled=true;await post('/done')})},
+  go('Save',async b=>{b.disabled=true;v.pause();await post('/to-save')})},
 
- async done(){const D=await data();app.append(el('h1','','Done'));for(const p of D.videos)app.append(el('div','path',p))},
+ async save(){const D=await data();let folder=D.folder,q='full';const pick=new Set(D.titles.map((_,i)=>i));app.append(el('h1','','Save'));
+  if(D.titles.length>1)D.titles.forEach((t,i)=>{const r=el('div','row on');r.append(el('span','rad'),el('span','t',(i+1)+'   '+t));
+    r.onclick=()=>{pick.has(i)?pick.delete(i):pick.add(i);r.classList.toggle('on');b.disabled=!pick.size;b.textContent=label()};app.append(r)});
+  app.append(el('div','lab','Folder'));const places=el('div','chips'),inp=el('input');inp.type='text';inp.value=folder;inp.spellcheck=false;
+  const mark=()=>[...places.children].forEach(c=>c.classList.toggle('on',c.dataset.p===inp.value.trim()));
+  for(const [n,p] of D.places){const c=el('button','chip',n);c.dataset.p=p;c.onclick=()=>{inp.value=p;mark()};places.append(c)}
+  const ch=el('button','chip','Choose…');ch.onclick=async()=>{ch.disabled=true;try{const r=await (await post('/pick-folder',{start:inp.value.trim()})).json();if(r.folder){inp.value=r.folder;mark()}}catch(e){}ch.disabled=false};places.append(ch);
+  inp.oninput=mark;app.append(places,inp);mark();
+  app.append(el('div','lab','Quality'));const qs=el('div','chips');for(const [k,t] of [['full','Full quality'],['small','Small, for messaging']]){const c=el('button','chip'+(k===q?' on':''),t);
+    c.onclick=()=>{q=k;[...qs.children].forEach(x=>x.classList.toggle('on',x===c))};qs.append(c)}app.append(qs);
+  const label=()=>pick.size>1?'Save '+pick.size+' videos':'Save';const err=el('div','path');app.append(err);
+  const b=go(label(),async()=>{b.disabled=true;const r=await post('/save',{folder:inp.value.trim(),indexes:[...pick].sort(),quality:q});
+    if(!r.ok){err.textContent=(await r.json()).error||'Could not save there.';err.style.color='var(--warn)';b.disabled=false}})},
+
+ async done(){const D=await data();app.append(el('h1','','Saved'));for(const p of D.videos)app.append(el('div','path',p));
+  if(D.folder)go('Open the folder',()=>post('/open-folder'),true)},
  error(s){app.append(el('h1','','Something went wrong'),el('div','path',s.msg))}
 };
 async function tick(){try{const s=await (await fetch('/state',{cache:'no-store'})).json();
   if(s.stage!==cur||(s.stage==='highlight'&&s.index!==idx)||(s.stage==='review'&&s.rev!==rev)){cur=s.stage;rev=s.rev;idx=s.index;app.innerHTML='';app.onclick=null;app.className='';setDots(STEP[cur]??0);back.hidden=!BACK[cur];window.scrollTo(0,0);
-   if(WAIT[cur])app.append(el('div','wait',s.msg));else await V[cur](s)}
-  else if(WAIT[cur]){const w=app.querySelector('.wait');if(w&&w.textContent!==s.msg)w.textContent=s.msg}
+   if(WAIT[cur]){const w=el('div','wait');w.append(el('div','m',s.msg),el('div','e',left(s.left)));app.append(w)}else await V[cur](s)}
+  else if(WAIT[cur]){const w=app.querySelector('.wait');if(w){if(w.firstChild.textContent!==s.msg)w.firstChild.textContent=s.msg;const t=left(s.left);if(w.lastChild.textContent!==t)w.lastChild.textContent=t}}
  }catch(e){}setTimeout(tick,1000)}
 tick();
 </script></body></html>'''
@@ -443,7 +510,8 @@ def main():
                 self.send_header('Content-Length', str(len(body))); self.send_header('Cache-Control', 'no-store'); self.end_headers()
                 self.wfile.write(body)
             elif path == '/state':
-                self.send_json({k: st.get(k) for k in ('stage', 'msg', 'rev', 'index')})
+                self.send_json({**{k: st.get(k) for k in ('stage', 'msg', 'rev', 'index')},
+                                'left': max(0, round(st['eta'] - time.time())) if st.get('eta') else None})
             elif path == '/data':
                 brief = read_json(os.path.join(project, 'brief.json'), {})
                 vs = videos(project)
@@ -473,6 +541,14 @@ def main():
                     sel = [f"{m['clip']}:{m['k']}" for m in marks['marks']] if marks else rec
                     self.send_json({'clips': clips_, 'selected': sel, 'recommended': rec, 'budget': int(brief.get('length_seconds', 60)),
                                     'index': i, 'n': len(vs), 'title': vs[i]['title'] if vs else ''})
+                elif st['stage'] == 'save':
+                    home = os.path.expanduser('~')
+                    self.send_json({'titles': [v['title'] for v in vs][:len(st.get('videos', []))] or [''],
+                                    'folder': settings().get('save_folder') or os.path.join(home, 'Downloads'),
+                                    'places': [[n, os.path.join(home, n)] for n in ('Downloads', 'Desktop', 'Movies', 'Videos')
+                                               if os.path.isdir(os.path.join(home, n))]})
+                elif st['stage'] == 'done':
+                    self.send_json({'videos': st.get('saved') or st.get('videos', []), 'folder': st.get('saved_folder', '')})
                 elif st['stage'] == 'music':
                     self.send_json({'tracks': tracks(), 'choice': read_json(os.path.join(project, 'music.json')), 'n': len(vs)})
                 else:
@@ -606,13 +682,15 @@ def main():
                 for i in range(len(videos(project))):
                     if os.path.isdir(vdir(project, i)):
                         write_json(os.path.join(vdir(project, i), 'music.json'), req)
-                set_state(project, 'editing', 'Editing', reason='lines' if st.get('dirty', True) else 'music')
+                n = max(1, len(videos(project)))
+                why = 'lines' if st.get('dirty', True) else 'music'
+                set_state(project, 'editing', 'Editing', reason=why, eta=time.time() + n * (170 if why == 'lines' else 70))
             elif path == '/notes':
                 notes = read_json(os.path.join(project, 'notes.json'), [])
                 notes.append({'time': datetime.datetime.now().isoformat(timespec='seconds'), 'video': int(req.get('index', 0)) + 1,
                               'text': str(req.get('text', '')).strip(), 'handled': False})
                 write_json(os.path.join(project, 'notes.json'), notes)
-                set_state(project, 'editing', 'Editing', reason='notes')
+                set_state(project, 'editing', 'Editing', reason='notes', eta=time.time() + 120)
             elif path == '/back':
                 stage, n = st['stage'], len(videos(project))
                 many = len(read_json(os.path.join(project, 'plan.json'), {}).get('options', [])) > 1
@@ -629,13 +707,53 @@ def main():
                     set_state(project, 'highlight', index=max(0, n - 1))
                 elif stage == 'review':
                     set_state(project, 'music')
+                elif stage == 'save':
+                    set_state(project, 'review')
+            elif path == '/to-save':
+                set_state(project, 'save')
+            elif path == '/pick-folder':
+                return self.send_json({'folder': pick_folder(str(req.get('start') or os.path.expanduser('~')))})
+            elif path == '/save':
+                folder = os.path.abspath(os.path.expanduser(str(req.get('folder', '')).strip() or '~/Downloads'))
+                try:
+                    os.makedirs(folder, exist_ok=True)
+                except OSError as e:
+                    return self.send_json({'error': f'Cannot use that folder: {e.strerror}'}, 400)
+                vids, vs, saved = st.get('videos', []), videos(project), []
+                small = req.get('quality') == 'small'
+                for i in req.get('indexes', list(range(len(vids)))):
+                    if not 0 <= i < len(vids):
+                        continue
+                    src_file = vids[i]
+                    full = src_file.replace('-phone.mp4', '.mp4')
+                    if not small and os.path.exists(full):
+                        src_file = full
+                    title = re.sub(r'[\\/:*?"<>|]', '', vs[i]['title'] if i < len(vs) and vs[i].get('title') else 'Video').strip() or 'Video'
+                    name = (f'{i + 1} - ' if len(vids) > 1 else '') + title
+                    dst, k = os.path.join(folder, name + '.mp4'), 2
+                    while os.path.exists(dst):                       # never overwrite something already there
+                        dst = os.path.join(folder, f'{name} ({k}).mp4'); k += 1
+                    shutil.copyfile(src_file, dst)
+                    saved.append(dst.replace('\\', '/'))
+                settings({'save_folder': folder})
+                set_state(project, 'done', saved=saved, saved_folder=folder)
+            elif path == '/open-folder':
+                folder = st.get('saved_folder') or ''
+                if os.path.isdir(folder):
+                    subprocess.Popen(['open', folder] if sys.platform == 'darwin' else ['explorer', os.path.normpath(folder)]
+                                     if os.name == 'nt' else ['xdg-open', folder])
             elif path == '/done':
                 set_state(project, 'done')
             else:
                 return self.send_json({'error': 'not found'}, 404)
             self.send_json({'ok': True})
 
-    srv = ThreadingHTTPServer(('127.0.0.1', 0), H)
+    class Quiet(ThreadingHTTPServer):
+        def handle_error(self, request, client_address):
+            if not isinstance(sys.exc_info()[1], (ConnectionResetError, BrokenPipeError, ConnectionAbortedError)):
+                super().handle_error(request, client_address)
+
+    srv = Quiet(('127.0.0.1', 0), H)
     srv.daemon_threads = True
     url = f'http://127.0.0.1:{srv.server_address[1]}/'
     set_state(project, get_state(project)['stage'], get_state(project).get('msg', ''), url=url)

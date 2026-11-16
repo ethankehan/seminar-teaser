@@ -387,7 +387,7 @@ def main():
         fc[vi] = (f"[vc][{k}:v]overlay=x='-W+W*t/{total:.3f}':y={win['y'] + win['h']}:enable='{en}':shortest=1,"
                   f"fade=t=out:st={total - 0.5:.3f}:d=0.5[v]")
         k += 1
-    fc.append(''.join(mix) + f'amix=inputs={len(mix)}:normalize=0:duration=first,alimiter=limit=0.8:level=false[a]')
+    fc.append(''.join(mix) + f'amix=inputs={len(mix)}:normalize=0:duration=first,alimiter=limit=0.75:attack=1:release=60:level=false[a]')
     T.run(['ffmpeg', '-v', 'error', '-y', *inputs, '-filter_complex', ';'.join(fc), '-map', '[v]', '-map', '[a]',
            '-t', f'{total:.3f}', '-c:v', 'libx264', '-preset', 'medium', '-crf', '19', '-c:a', 'aac', '-b:a', '192k',
            '-ar', '48000', '-movflags', '+faststart', '-threads', T.THREADS, out])

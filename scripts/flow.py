@@ -2,7 +2,9 @@
 """The editor's side of the web flow (see app.py for the stages).
 
   PY flow.py wait <project> <stage> [<stage> ...]   block until the page reaches one of these stages; prints STAGE <name>
-  PY flow.py set <project> <stage> [message] [--video <path> ...]   move the page on (one --video per finished video)
+  PY flow.py set <project> <stage> [message] [--video <path> ...] [--eta <seconds>]
+                                                    move the page on (one --video per finished video; --eta updates
+                                                    the "about N min left" the person sees while you work)
   PY flow.py transcript <project>                   every phrase with its key, start time and length (for plan.json)
   PY flow.py videos <project>                       the videos to make: folder, title, highlighted seconds, changed?
   PY flow.py status <project>                       the stage an existing session is at and whose move it is
@@ -40,6 +42,10 @@ def main():
             del rest[i:i + 2]
         if vids:
             extra['videos'] = vids
+        if '--eta' in rest:                        # seconds you expect to need from now; the page counts down
+            i = rest.index('--eta')
+            extra['eta'] = time.time() + float(rest[i + 1])
+            del rest[i:i + 2]
         if rest[0] == 'plan':                      # one option only: nothing to choose, go straight to the lines
             opts = A.read_json(os.path.join(project, 'plan.json'), {}).get('options', [])
             if len(opts) <= 1:

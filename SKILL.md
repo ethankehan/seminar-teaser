@@ -58,7 +58,8 @@ The page moves through stages; `state.json` holds the current one. You never pol
 | highlight | person | adjusts your selection, once per video |
 | music | person | picks a track, their own file, or none |
 | **editing** | **you** | build and render, or apply their notes |
-| review | person | watches; sends notes (back to editing) or presses Done |
+| review | person | watches; sends notes (back to editing) or presses Save |
+| save | person | chooses the folder, which videos, and the quality; the app copies the files there |
 | done | | app closes |
 
 The page has a Back link (plan → brief, highlight → previous video / plan / brief, music → highlight, review →
@@ -69,6 +70,11 @@ music), so a stage can come round again.
   same clips from the old `trailer.json`).
 - `music`: only the music changed. Render again (about 1 minute), nothing else.
 - `notes`: Step 7.
+
+While you work the page shows "About N min left". The app estimates it (transcription from the footage length
+and the measured speed; your stages from typical times). When you know better, say so:
+`PY SK/scripts/flow.py set <project> editing "Editing video 2 of 4" --eta 300` (seconds from now). Update the
+message as you move from one video to the next so the person sees progress.
 
 First wait: `PY SK/scripts/flow.py wait <project> suggesting`. A stage of `error` ends any wait: read the message.
 
@@ -208,7 +214,8 @@ text in the language the speaker used for that line; do not translate.
 Music notes: `"music": {"file": "...", "volume": 0.7}` in trailer.json overrides the page's choice (1.0 is the
 default level; the track ducks under the voice by itself). `"bed": false` removes the drone used when there is no
 track; `"hit"` per card sets the bass hit.
-`done`: tell them where the files are (full quality and `-phone.mp4` in each `<project>/vN/renders`), the lines in order,
+`done`: they saved the videos from the page (`saved` in `state.json` lists the files and the folder they chose;
+the originals stay in each `<project>/vN/renders`). Tell them where the files are, the lines in order,
 what you dropped and why. You cannot hear the mix: say so once and ask them to listen for the music level.
 
 ## Rules that came from real feedback (not up for debate)
